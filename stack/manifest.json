@@ -1,0 +1,49 @@
+{
+  "sharedMcp": {
+    "context-mode": {
+      "type": "local",
+      "command": ["context-mode"],
+      "enabledByDefault": true
+    },
+    "context7": {
+      "type": "local",
+      "command": ["context7-mcp"],
+      "enabledByDefault": true
+    },
+    "jira": {
+      "type": "remote",
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "enabledByDefault": false,
+      "oauth": true,
+      "notes": "Per-user OAuth"
+    },
+    "figma": {
+      "type": "remote",
+      "url": "http://127.0.0.1:3845/sse",
+      "enabledByDefault": false,
+      "notes": "Requires local bridge"
+    }
+  },
+  "opencode": {
+    "plugins": [
+      "context-mode"
+    ],
+    "projectSkillsSources": [
+      "naman/skills/opencode"
+    ],
+    "globalSkillsSources": [
+      "naman/skills/opencode",
+      "naman/skills/shared"
+    ]
+  },
+  "claude": {
+    "portableSource": "shahil/portable",
+    "enabledPlugins": {
+      "context-mode@context-mode": true,
+      "figma@claude-plugins-official": true,
+      "watch@claude-video": true,
+      "obsidian@obsidian-skills": true,
+      "gopls-lsp@claude-plugins-official": true
+    }
+  }
+}

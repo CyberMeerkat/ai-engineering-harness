@@ -1,0 +1,9 @@
+# opencode
+/.opencode
+
+# env
+/.env
+/naman/.env.team
+
+# schemas
+/opencode.jsonc

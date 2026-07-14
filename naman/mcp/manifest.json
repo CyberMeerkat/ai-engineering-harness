@@ -1,0 +1,34 @@
+{
+  "mcps": [
+    {
+      "name": "context-mode",
+      "tool": "opencode",
+      "type": "local",
+      "command": ["context-mode"],
+      "source": "local inventory"
+    },
+    {
+      "name": "context7",
+      "tool": "opencode",
+      "type": "local",
+      "command": ["context7-mcp"],
+      "source": "local inventory"
+    },
+    {
+      "name": "jira",
+      "tool": "opencode",
+      "type": "remote",
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "source": "local inventory",
+      "notes": "Requires per-user OAuth setup"
+    },
+    {
+      "name": "figma",
+      "tool": "opencode",
+      "type": "remote",
+      "url": "http://127.0.0.1:3845/sse",
+      "source": "local inventory",
+      "notes": "Machine-local Figma bridge"
+    }
+  ]
+}

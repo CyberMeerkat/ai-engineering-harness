@@ -1,0 +1,30 @@
+{
+  "node": {
+    "major": 22,
+    "brewFormula": "node@22",
+    "wingetId": "OpenJS.NodeJS.LTS",
+    "chocoPackage": "nodejs-lts",
+    "scoopPackage": "nodejs-lts"
+  },
+  "opencode": {
+    "npm": "1.16.2",
+    "desktop": {
+      "version": "1.16.2",
+      "macos": {
+        "arm64": "opencode-desktop-mac-arm64.dmg",
+        "x64": "opencode-desktop-mac-x64.dmg"
+      },
+      "windows": {
+        "arm64": "opencode-desktop-win-arm64.exe",
+        "x64": "opencode-desktop-win-x64.exe"
+      }
+    }
+  },
+  "mcp": {
+    "context-mode": "1.0.162",
+    "context7-mcp": "latest"
+  },
+  "claude": {
+    "install": "native-latest"
+  }
+}
