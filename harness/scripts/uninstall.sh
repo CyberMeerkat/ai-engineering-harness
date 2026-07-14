@@ -51,13 +51,15 @@ for backup_name in config data cache; do
   src="$NEWEST/$backup_name"
   dest="${RESTORE_MAP[$backup_name]}"
   if [ -d "$src" ]; then
-    if [ "$DRY_RUN" = "0" ] && [ -d "$dest" ]; then
-      run rm -rf "$dest"
-    elif [ "$DRY_RUN" = "1" ] && [ -d "$dest" ]; then
+    if [ -d "$dest" ]; then
       run rm -rf "$dest"
     fi
     run cp -R "$src" "$dest"
-    printf 'restored %s\n' "$dest"
+    if [ "$DRY_RUN" = "1" ]; then
+      printf '[dry-run] would restore %s\n' "$dest"
+    else
+      printf 'restored %s\n' "$dest"
+    fi
   else
     printf 'skip %s (not in backup)\n' "$backup_name"
   fi

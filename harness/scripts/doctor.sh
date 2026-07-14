@@ -17,7 +17,8 @@ fail() { printf '[FAIL] %s\n' "$*" >&2; FAIL=1; }
 
 # ── 1. prereqs via check-prereqs.sh ───────────────────────────────────────────
 printf '--- Prerequisites ---\n'
-if bash "$HARNESS_DIR/scripts/check-prereqs.sh" --json 2>/dev/null | python3 - <<'PY'
+PREREQS_JSON="$(bash "$HARNESS_DIR/scripts/check-prereqs.sh" --json 2>/dev/null || true)"
+if printf '%s' "$PREREQS_JSON" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 for k, v in data.items():
@@ -25,7 +26,7 @@ for k, v in data.items():
     prefix = '[OK]  ' if v.startswith('ok') else '[FAIL]'
     print(f'{prefix} {k}: {v}')
 sys.exit(0 if data.get('ok') else 1)
-PY
+"
 then
   :
 else

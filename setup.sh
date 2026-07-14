@@ -38,7 +38,11 @@ export DRY_RUN MODE
 bash "$HARNESS_DIR/scripts/check-prereqs.sh" || exit 1
 
 if [ "$UNINSTALL" = "1" ]; then
-  bash "$HARNESS_DIR/scripts/uninstall.sh" ${DRY_RUN:+--dry-run}
+  if [ "$DRY_RUN" = "1" ]; then
+    bash "$HARNESS_DIR/scripts/uninstall.sh" --dry-run
+  else
+    bash "$HARNESS_DIR/scripts/uninstall.sh"
+  fi
   exit $?
 fi
 if [ "$DOCTOR" = "1" ]; then

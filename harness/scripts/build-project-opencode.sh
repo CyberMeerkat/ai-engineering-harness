@@ -47,10 +47,12 @@ if [ ! -f "$ENV_FILE" ]; then
   run cp "$ROOT_DIR/harness/templates/.env.team.example" "$ENV_FILE"
 fi
 
-set -a
-# shellcheck disable=SC1090
-. "$ENV_FILE"
-set +a
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
 
 render_template() {
   local template_file="$1"
