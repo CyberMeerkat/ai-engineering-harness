@@ -709,7 +709,11 @@ Install-OpenCodeDesktop
 Assert-NodeVersion
 Install-McpDeps
 Write-ProjectConfig
-Validate-Setup
+if (-not $DryRun) {
+  Validate-Setup
+} else {
+  Write-Host "[dry-run] would run validation checks"
+}
 
 Write-Host ''
 Write-Host 'Setup complete.'
