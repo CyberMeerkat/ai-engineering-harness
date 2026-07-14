@@ -508,7 +508,6 @@ function Validate-Setup {
   $requiredPaths = @(
     (Join-Path $RootDir 'opencode.jsonc'),
     (Join-Path $RootDir '.opencode\skills\frontend-design\SKILL.md'),
-    (Join-Path $RootDir '.opencode\skills\incident-report-logger\SKILL.md'),
     (Join-Path $HOME '.config\opencode\opencode.json'),
     (Join-Path $HOME '.config\opencode\skills\understand\SKILL.md')
   )

@@ -1,0 +1,23 @@
+# Auto detect text files and normalize line endings on checkout.
+* text=auto eol=lf
+
+# Explicitly force LF for scripts that must run as-is on any OS
+# (bash requires LF shebangs; CRLF causes "bad interpreter" errors under
+# WSL/git-bash if a Windows clone has core.autocrlf=true).
+*.sh text eol=lf
+
+# PowerShell scripts are conventionally CRLF on Windows; keep that.
+*.ps1 text eol=crlf
+
+# JSON/config stay LF for consistent diffs across OSes.
+*.json text eol=lf
+*.jsonc text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
+*.py text eol=lf
+
+# Binary-ish or generated — leave untouched
+*.png binary
+*.jpg binary
+*.ico binary

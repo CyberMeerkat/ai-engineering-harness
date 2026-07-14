@@ -59,7 +59,7 @@ Windows equivalents use `-DryRun`, `-Reset`, `-Uninstall`, `-Doctor` switches on
 harness/
   scripts/      setup helpers + new: check-prereqs, uninstall, doctor
   skills/
-    opencode/   skills loaded by OpenCode (frontend-design, incident-report-logger, tailscale-opencode-web)
+    opencode/   skills loaded by OpenCode (frontend-design, tailscale-opencode-web)
     shared/     understand-* skill family (codebase analysis, onboarding, domain extraction)
   mcp/          MCP inventory notes; add real MCP servers here
   plugins/      plugin manifests

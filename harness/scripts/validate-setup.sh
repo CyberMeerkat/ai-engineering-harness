@@ -43,7 +43,6 @@ check_command_runs context7-mcp
 
 check_file "$PROJECT_ROOT/opencode.jsonc"
 check_file "$PROJECT_ROOT/.opencode/skills/frontend-design/SKILL.md"
-check_file "$PROJECT_ROOT/.opencode/skills/incident-report-logger/SKILL.md"
 check_file "$HOME/.config/opencode/opencode.json"
 check_file "$HOME/.config/opencode/skills/understand/SKILL.md"
 

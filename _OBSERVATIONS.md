@@ -50,15 +50,13 @@ The file refers to "team-shareable assets" and "team-authored skills" in its rem
 
 ---
 
-## 4. Skill relevance review (personal harness, not team harness)
+## 4. Skill relevance review (personal harness, not team harness) — RESOLVED
 
 Two of the three OpenCode-specific skills were originally authored for a team/workplace context and may not fit a personal harness:
 
-- `incident-report-logger` — produces incident reports "for clients, outages, and remediation summaries" in a fixed operational format. This reads as workplace/on-call tooling, not personal dev harness content.
-- `tailscale-opencode-web` — runs OpenCode Web via Tailscale. This is **directly relevant** to the stated goal of using the harness across multiple devices (remote access to a running OpenCode session) — recommend keeping.
-- `frontend-design` — generically useful, no team-specific framing. Recommend keeping.
-
-**Not acted on** — this is a content/curation decision for the harness owner, not a bug. Flagging for a decision.
+- `incident-report-logger` — produces incident reports "for clients, outages, and remediation summaries" in a fixed operational format. This reads as workplace/on-call tooling, not personal dev harness content. **Decision: dropped.** Removed from `harness/skills/opencode/`, `validate-setup.sh`, `setup.ps1`'s required-path list, and `README.md`.
+- `tailscale-opencode-web` — runs OpenCode Web via Tailscale. This is **directly relevant** to the stated goal of using the harness across multiple devices (remote access to a running OpenCode session). Kept.
+- `frontend-design` — generically useful, no team-specific framing. Kept.
 
 ---
 
