@@ -12,13 +12,43 @@ GLOBAL_OPENCODE_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/opencode"
 GLOBAL_BACKUP_ROOT="${HOME}/.config/opencode-harness-backups"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 
-mkdir -p "$OPENCODE_DIR/skills"
+# inherit from parent (setup.sh exports these)
+DRY_RUN="${DRY_RUN:-0}"
+MODE="${MODE:-incremental}"
+
+# ── dry-run wrapper ────────────────────────────────────────────────────────────
+run() {
+  if [ "$DRY_RUN" = "1" ]; then
+    printf '[dry-run] %s\n' "$*"
+  else
+    "$@"
+  fi
+}
+
+# ── backup retention ───────────────────────────────────────────────────────────
+prune_old_backups() {
+  local backup_root="$1"
+  local keep="${HARNESS_BACKUP_RETENTION:-5}"
+  [ -d "$backup_root" ] || return 0
+  local count
+  count="$(find "$backup_root" -mindepth 1 -maxdepth 1 -type d | wc -l)"
+  if [ "$count" -gt "$keep" ]; then
+    # sort ascending (oldest first) and remove all but the newest $keep
+    find "$backup_root" -mindepth 1 -maxdepth 1 -type d | sort | head -n "$(( count - keep ))" | while IFS= read -r old_dir; do
+      printf 'backup retention: removing old backup %s\n' "$old_dir" >&2
+      run rm -rf "$old_dir"
+    done
+  fi
+}
+
+run mkdir -p "$OPENCODE_DIR/skills"
 
 if [ ! -f "$ENV_FILE" ]; then
-  cp "$ROOT_DIR/harness/templates/.env.team.example" "$ENV_FILE"
+  run cp "$ROOT_DIR/harness/templates/.env.team.example" "$ENV_FILE"
 fi
 
 set -a
+# shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
 
@@ -26,6 +56,7 @@ render_template() {
   local template_file="$1"
   local output_file="$2"
   local mode="$3"
+  # NOTE: Python heredoc reads files only (not a destructive op — not wrapped in run())
   python3 - <<'PY' "$template_file" "$STACK_MANIFEST" "$output_file" "$mode"
 import json
 import sys
@@ -54,20 +85,25 @@ if mode == 'global':
     template['mcp'] = mcp
     template['plugin'] = manifest.get('opencode', {}).get('plugins', [])
 
-with open(output_path, 'w', encoding='utf-8') as f:
-    json.dump(template, f, indent=2)
-    f.write('\n')
+if mode != 'global' or True:
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(template, f, indent=2)
+        f.write('\n')
 PY
 }
 
-render_template "$ROOT_DIR/harness/templates/opencode.template.jsonc" "$PROJECT_ROOT/opencode.jsonc" project
+if [ "$DRY_RUN" = "0" ]; then
+  render_template "$ROOT_DIR/harness/templates/opencode.template.jsonc" "$PROJECT_ROOT/opencode.jsonc" project
+else
+  printf '[dry-run] render_template -> %s/opencode.jsonc\n' "$PROJECT_ROOT"
+fi
 
 backup_dir_if_exists() {
   local source_dir="$1"
   local backup_name="$2"
   if [ -d "$source_dir" ]; then
-    mkdir -p "$GLOBAL_BACKUP_ROOT/$TIMESTAMP"
-    cp -R "$source_dir" "$GLOBAL_BACKUP_ROOT/$TIMESTAMP/$backup_name"
+    run mkdir -p "$GLOBAL_BACKUP_ROOT/$TIMESTAMP"
+    run cp -R "$source_dir" "$GLOBAL_BACKUP_ROOT/$TIMESTAMP/$backup_name"
   fi
 }
 
@@ -75,19 +111,29 @@ backup_dir_if_exists "$GLOBAL_OPENCODE_DIR" config
 backup_dir_if_exists "$GLOBAL_OPENCODE_DATA_DIR" data
 backup_dir_if_exists "$GLOBAL_OPENCODE_CACHE_DIR" cache
 
-rm -rf "$GLOBAL_OPENCODE_DIR" "$GLOBAL_OPENCODE_DATA_DIR" "$GLOBAL_OPENCODE_CACHE_DIR"
-mkdir -p "$GLOBAL_OPENCODE_DIR"
-render_template "$ROOT_DIR/harness/templates/opencode.template.jsonc" "$GLOBAL_OPENCODE_DIR/opencode.json" global
+prune_old_backups "$GLOBAL_BACKUP_ROOT"
 
-rm -rf "$OPENCODE_DIR/skills" "$GLOBAL_OPENCODE_DIR/skills"
-mkdir -p "$OPENCODE_DIR/skills" "$GLOBAL_OPENCODE_DIR/skills"
+if [ "$MODE" = "reset" ]; then
+  run rm -rf "$GLOBAL_OPENCODE_DIR" "$GLOBAL_OPENCODE_DATA_DIR" "$GLOBAL_OPENCODE_CACHE_DIR"
+fi
+
+run mkdir -p "$GLOBAL_OPENCODE_DIR"
+
+if [ "$DRY_RUN" = "0" ]; then
+  render_template "$ROOT_DIR/harness/templates/opencode.template.jsonc" "$GLOBAL_OPENCODE_DIR/opencode.json" global
+else
+  printf '[dry-run] render_template -> %s/opencode.json\n' "$GLOBAL_OPENCODE_DIR"
+fi
+
+run rm -rf "$OPENCODE_DIR/skills" "$GLOBAL_OPENCODE_DIR/skills"
+run mkdir -p "$OPENCODE_DIR/skills" "$GLOBAL_OPENCODE_DIR/skills"
 
 copy_skills_flat() {
   local source_root="$1"
   local target_root="$2"
   for skill_dir in "$source_root"/*; do
     [ -d "$skill_dir" ] || continue
-    cp -R "$skill_dir" "$target_root/$(basename "$skill_dir")"
+    run cp -R "$skill_dir" "$target_root/$(basename "$skill_dir")"
   done
 }
 
