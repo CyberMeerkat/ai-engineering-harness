@@ -87,11 +87,6 @@ jobs:
         with:
           node-version: ${{ steps.node-version.outputs.major }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
       - name: Dry-run setup (bash)
         if: runner.os != 'Windows'
         run: bash setup.sh --dry-run
@@ -100,6 +95,15 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: .\setup.ps1 -DryRun
+
+      - name: Doctor (bash)
+        if: runner.os != 'Windows'
+        run: bash setup.sh --doctor
+
+      - name: Doctor (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\setup.ps1 -Doctor
 
   # ── 5. local security plugins: syntax + functional smoke test ──────────────
   test-plugins:
@@ -122,3 +126,23 @@ jobs:
 
       - name: Functional smoke test
         run: node .github/scripts/test-local-plugins.mjs
+
+  # ── 6. installer core: syntax-check every module ────────────────────────────
+  test-installer-core:
+    name: Syntax-check installer core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Syntax-check setup.mjs and every lib module
+        run: |
+          node --check harness/scripts/setup.mjs
+          for f in harness/scripts/lib/*.mjs; do
+            echo "checking $f"
+            node --check "$f"
+          done

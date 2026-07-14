@@ -12,4 +12,4 @@ It defines canonical shared integrations once, then generators build tool-specif
 
 ## Current generators
 
-- `harness/scripts/build-project-opencode.sh` reads this manifest for OpenCode MCP and plugin generation.
+- `harness/scripts/lib/project-config.mjs` (invoked via `setup.mjs`) reads this manifest for OpenCode MCP, plugin, skill, and local-plugin generation.

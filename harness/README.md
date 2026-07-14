@@ -27,13 +27,8 @@ This directory is the source of truth for the harness: a repo-first library that
 | `plugins/` | Repo-managed plugin manifests and inventory notes. |
 | `plugins/local/` | Local enforcement plugins (secret scanning, generated-file protection, JWT stripping) — installed globally, auto-loaded by OpenCode. |
 | `templates/` | Config templates for local tool setup. |
-| `scripts/build-project-opencode.sh` | Builds project-local `.opencode/` and `opencode.jsonc` from repo templates. |
-| `scripts/install-opencode.sh` | Installs OpenCode on macOS/Linux. |
-| `scripts/install-mcp-deps.sh` | Installs local MCP helper binaries when available. |
-| `scripts/validate-setup.sh` | Verifies the repo is ready to run with OpenCode. |
-| `scripts/check-prereqs.sh` | Pre-flight prerequisite check. |
-| `scripts/uninstall.sh` | Restores the newest backup. |
-| `scripts/doctor.sh` | Diagnostic report: versions, PATH, writable dirs. |
+| `scripts/setup.mjs` | Main installer orchestrator — the single source of truth for install logic (see `scripts/lib/`). Invoked by the thin `../setup.sh` / `../setup.ps1` launchers, not directly. |
+| `scripts/lib/` | One module per concern: prereqs, opencode-install, mcp-install, project-config (templates/skills/plugins), backup, validate, uninstall, doctor, platform (cross-platform helpers). |
 
 ## Recommended OpenCode setup
 
@@ -59,6 +54,10 @@ The default integration set is:
 - OpenCode plugin: `context-mode`
 
 Those are represented as templates rather than checked-in live configs.
+
+## Installer architecture
+
+`../setup.sh` and `../setup.ps1` are thin launchers whose only job is to make sure a working Node.js is present, then hand off to `scripts/setup.mjs`. Every other concern — OpenCode install, MCP install, project config, skills, plugins, backup/retention, validate, uninstall, doctor — lives in exactly one place (the Node.js core under `scripts/lib/`) instead of being maintained twice in parallel bash and PowerShell implementations. One side benefit: the Node core uses native `JSON.parse`/`fetch()`, so `python3` and `curl` are no longer required once Node itself is bootstrapped.
 
 ## Bootstrapping
 

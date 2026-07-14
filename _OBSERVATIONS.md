@@ -4,6 +4,23 @@ Items noted during the rework but not acted on (per handoff §9 and §10 "do not
 
 ---
 
+## -2. Phase 4: installer consolidation — 4 real bugs caught by local testing before any push
+
+Consolidated `setup.sh` (bash) + `setup.ps1` (PowerShell) — ~880 combined lines with proven, drift-prone duplication (3 separate rounds of "fix the same bug class in both places" earlier in this session) — into a single Node.js core (`harness/scripts/setup.mjs` + `harness/scripts/lib/*.mjs`), with both launchers reduced to ~90-line Node-bootstrap-only wrappers.
+
+Every module was tested against real system state (not mocked) before being trusted — sandboxed temp directories with env-var overrides for anything that would otherwise touch the real `~/.config/opencode`. This caught 4 more real bugs, on top of the 2 already recorded in §-1:
+
+1. **`isOpenCodeRunnable()` always returned `false`** even though `opencode` was genuinely installed and working. Root cause: `execFileSync("opencode.cmd", ...)` without `{ shell: true }` fails with `EINVAL` on Windows — `.cmd`/`.bat` files aren't directly executable the way a `.exe` is; they need `cmd.exe` to interpret them. Fixed by making `runCapture`/`runInherit` in `platform.mjs` default to `shell: isWindows`, and adding a `commandRuns()` helper so no caller has to know about this.
+2. **`resolveDesktopPath()` couldn't find the real, working OpenCode Desktop install** at `Programs\@opencode-aidesktop\OpenCode.exe` — a non-standard folder name the fixed candidate-path list didn't anticipate. The *original* PowerShell `Resolve-OpenCodeDesktopPath` had a recursive-search fallback across `LOCALAPPDATA`/`ProgramFiles`/`ProgramFiles(x86)` specifically to handle this; the initial Node port dropped it. Ported a bounded-depth (6) recursive file search to restore the fallback — verified it actually finds the real install in ~1.4s.
+3. **`setup.ps1`'s plugin-copy step silently copied zero files.** `Get-ChildItem -Path $source -Include '*.mjs','*.js' -File` is a documented PowerShell gotcha: `-Include` only filters *after* `-Path` has been wildcard-expanded, so without a trailing `\*` (or `-Recurse`) it's a no-op — no error, no warning, just nothing copied. Would have shipped a feature that installed zero plugins, forever. Fixed with `Get-ChildItem -File | Where-Object { $_.Extension -in '.mjs', '.js' }`.
+4. **A test harness accidentally polluted the real `~/.config/opencode-harness-backups/`** during `project-config.mjs` testing, because `resolveGlobalDirs().backupRoot` has no env-var override (matching the *original* bash's `GLOBAL_BACKUP_ROOT="${HOME}/.config/..."`, always hardcoded — not a regression, a faithful port). Not a code bug, but a testing-hygiene lesson: real-mode tests of anything touching the backup path need explicit cleanup (or the real home dir needs mocking), not just sandboxed config/data/cache dirs.
+
+**Also verified (not bugs, but worth recording as deliberate parity checks):** the bash `copy_plugins_flat()` glob-with-no-match case (`for f in *.mjs *.js; do [ -f "$f" ] || continue; done`) does NOT have the PowerShell `-Include` bug — bash's unmatched-glob-stays-literal behavior combined with the explicit `[ -f ]` guard handles it correctly, confirmed by careful trace-through since bash wasn't available locally to execute directly.
+
+**Real, measurable side benefit of the consolidation:** the Node core's native `JSON.parse`/`fetch()` eliminates the `python3`/`curl` prerequisites that the bash implementation needed purely for JSON parsing and file downloads. One less thing to check for, one less way for `--doctor` to report a false blocker.
+
+---
+
 ## -1. Phase 6: security plugins, local testing caught 2 more real bugs
 
 Same discipline as §0 (test the actual thing, don't just reason about it), applied to porting 3 of the 4 shahil Claude Code hooks to OpenCode's `tool.execute.before` plugin API (`harness/plugins/local/`). This time Node *was* available locally, so both a `node --check` syntax pass and a 12-case functional smoke test (`.github/scripts/test-local-plugins.mjs`) ran before pushing — and still caught two real bugs local reasoning alone missed:

@@ -1,138 +1,92 @@
 #!/usr/bin/env bash
+# setup.sh — thin launcher.
+#
+# This script's ONLY job is to make sure a working Node.js is present, then
+# hand off to the real installer (harness/scripts/setup.mjs). Every other
+# concern (OpenCode install, MCP install, project config, skills, plugins,
+# backup/retention, validate, uninstall, doctor) lives in exactly one place
+# — the Node.js core — instead of being duplicated here and in setup.ps1.
+#
+# This file can't be empty: bootstrapping a working Node.js is inherently
+# the one thing that has to happen *before* a Node.js script can run at all.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HARNESS_DIR="$ROOT_DIR/harness"
 VERSIONS_PATH="$ROOT_DIR/versions.json"
 
-DRY_RUN=0
-MODE="incremental"
-UNINSTALL=0
-DOCTOR=0
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --dry-run) DRY_RUN=1; shift ;;
-    --reset) MODE="reset"; shift ;;
-    --incremental) MODE="incremental"; shift ;;
-    --uninstall) UNINSTALL=1; shift ;;
-    --doctor) DOCTOR=1; shift ;;
-    -h|--help)
-      cat <<EOF
-Usage: ./setup.sh [options]
-
-Options:
-  --dry-run       Print actions without executing them.
-  --incremental   Update in place, keep global OpenCode state (default).
-  --reset         Wipe global OpenCode config/data/cache before rebuild.
-  --uninstall     Restore the newest backup and exit.
-  --doctor        Run diagnostics and exit.
-  -h, --help      Show this message.
-EOF
-      exit 0 ;;
-    *) printf 'Unknown option: %s\n' "$1" >&2; exit 1 ;;
-  esac
-done
-
-export DRY_RUN MODE
-
-bash "$HARNESS_DIR/scripts/check-prereqs.sh" || exit 1
-
-if [ "$UNINSTALL" = "1" ]; then
-  if [ "$DRY_RUN" = "1" ]; then
-    bash "$HARNESS_DIR/scripts/uninstall.sh" --dry-run
-  else
-    bash "$HARNESS_DIR/scripts/uninstall.sh"
-  fi
-  exit $?
-fi
-if [ "$DOCTOR" = "1" ]; then
-  bash "$HARNESS_DIR/scripts/doctor.sh"
-  exit $?
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  # setup.mjs prints the real usage text; -h/--help is also valid before
+  # Node is confirmed present, so just hand off directly (--help never
+  # touches the filesystem, no need to bootstrap Node version checking
+  # first if Node is already available; if it's not, fall through to the
+  # normal bootstrap below, which will surface a clear error instead).
+  :
 fi
 
-install_opencode_desktop() {
-  [ "$(uname -s)" = "Darwin" ] || return 0
-
-  if [ -d "/Applications/OpenCode.app" ] || [ -d "$HOME/Applications/OpenCode.app" ]; then
-    printf 'OpenCode desktop already installed\n'
-    return 0
-  fi
-
-  if ! command -v python3 >/dev/null 2>&1; then
-    printf 'Skipping OpenCode desktop install: python3 is required to read versions.json\n' >&2
-    return 0
-  fi
-
-  if [ "${DRY_RUN:-0}" = "1" ]; then
-    printf '[dry-run] OpenCode desktop not installed; would download and install it\n'
-    return 0
-  fi
-
-  local arch asset version base_url tmp_dir dmg_path mount_point app_target_dir
-  arch="$(uname -m)"
-  if [ "$arch" = "arm64" ]; then
-    arch="arm64"
-  else
-    arch="x64"
-  fi
-
-  asset="$(python3 - <<'PY' "$VERSIONS_PATH" "$arch"
-import json
-import sys
-
-with open(sys.argv[1], 'r', encoding='utf-8') as f:
-    versions = json.load(f)
-
-print(versions['opencode']['desktop']['macos'][sys.argv[2]])
-PY
-)"
-  version="$(python3 - <<'PY' "$VERSIONS_PATH"
-import json
-import sys
-
-with open(sys.argv[1], 'r', encoding='utf-8') as f:
-    versions = json.load(f)
-
-print(versions['opencode']['desktop']['version'])
-PY
-)"
-
-  base_url="https://github.com/anomalyco/opencode/releases/download/v${version}"
-  tmp_dir="$(mktemp -d)"
-  dmg_path="$tmp_dir/$asset"
-  mount_point="$tmp_dir/mount"
-  app_target_dir="/Applications"
-  if [ ! -w "$app_target_dir" ]; then
-    app_target_dir="$HOME/Applications"
-    mkdir -p "$app_target_dir"
-  fi
-
-  printf 'Installing OpenCode desktop (%s)\n' "$asset"
-  curl -fsSL "$base_url/$asset" -o "$dmg_path"
-  mkdir -p "$mount_point"
-  hdiutil attach "$dmg_path" -mountpoint "$mount_point" -nobrowse >/dev/null
-  cp -R "$mount_point/OpenCode.app" "$app_target_dir/OpenCode.app"
-  hdiutil detach "$mount_point" >/dev/null
-  rm -rf "$tmp_dir"
-  printf 'Installed OpenCode desktop to %s/OpenCode.app\n' "$app_target_dir"
+node_major() {
+  node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0
 }
 
-printf '==> Install OpenCode CLI\n'
-bash "$HARNESS_DIR/scripts/install-opencode.sh"
-printf '==> Install OpenCode desktop (if needed)\n'
-install_opencode_desktop
-printf '==> Ensure Node version\n'
-bash "$HARNESS_DIR/scripts/install-node.sh"
-printf '==> Install MCP dependencies\n'
-bash "$HARNESS_DIR/scripts/install-mcp-deps.sh"
-printf '==> Build OpenCode configs and skills\n'
-bash "$HARNESS_DIR/scripts/build-project-opencode.sh"
-if [ "$DRY_RUN" = "0" ]; then
-  printf '==> Validate OpenCode setup\n'
-  bash "$HARNESS_DIR/scripts/validate-setup.sh"
-else
-  printf '[dry-run] would run validation checks\n'
+# Minimal, dependency-free JSON field extraction — deliberately not using
+# python3/jq/node here, since ensuring one of those exists is the very
+# thing this bootstrap step is responsible for. Single-pass grep (no -A
+# context matching) so it doesn't depend on exact line offsets.
+read_required_major() {
+  grep -m1 -oE '"major"[[:space:]]*:[[:space:]]*[0-9]+' "$VERSIONS_PATH" | grep -oE '[0-9]+'
+}
+
+read_brew_formula() {
+  grep -m1 -oE '"brewFormula"[[:space:]]*:[[:space:]]*"[^"]+"' "$VERSIONS_PATH" | sed -E 's/.*"([^"]+)"$/\1/'
+}
+
+REQUIRED_MAJOR="$(read_required_major)"
+if [ -z "$REQUIRED_MAJOR" ]; then
+  printf 'Could not read required Node.js version from %s\n' "$VERSIONS_PATH" >&2
+  exit 1
 fi
 
-printf '\nSetup complete.\n'
-printf 'Next: review %s/.env.team, then run opencode from this repo root.\n' "$HARNESS_DIR"
+ensure_node() {
+  if command -v node >/dev/null 2>&1; then
+    local current
+    current="$(node_major)"
+    if [ "$current" -ge "$REQUIRED_MAJOR" ]; then
+      return 0
+    fi
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    local formula
+    formula="$(read_brew_formula)"
+    brew install "$formula"
+    local brew_prefix
+    brew_prefix="$(brew --prefix "$formula" 2>/dev/null || true)"
+    if [ -n "$brew_prefix" ]; then
+      export PATH="$brew_prefix/bin:$PATH"
+    fi
+  elif [ -s "$HOME/.nvm/nvm.sh" ]; then
+    # shellcheck disable=SC1090
+    . "$HOME/.nvm/nvm.sh"
+    nvm install "$REQUIRED_MAJOR"
+    nvm use "$REQUIRED_MAJOR"
+  else
+    printf 'Node.js %s+ is required. Install it (for example via Homebrew or nvm) and re-run setup.\n' "$REQUIRED_MAJOR" >&2
+    exit 1
+  fi
+
+  if ! command -v node >/dev/null 2>&1; then
+    printf 'Node.js install completed, but node is still unavailable. Restart your shell and re-run setup.\n' >&2
+    exit 1
+  fi
+
+  local current
+  current="$(node_major)"
+  if [ "$current" -lt "$REQUIRED_MAJOR" ]; then
+    printf 'Node.js %s+ is required. Current version: %s\n' "$REQUIRED_MAJOR" "$(node -p 'process.versions.node')" >&2
+    exit 1
+  fi
+}
+
+ensure_node
+
+exec node "$HARNESS_DIR/scripts/setup.mjs" "$@"
