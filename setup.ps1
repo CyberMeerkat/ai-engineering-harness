@@ -1,11 +1,52 @@
+param(
+  [switch]$DryRun,
+  [switch]$Reset,
+  [switch]$Incremental,
+  [switch]$Uninstall,
+  [switch]$Doctor,
+  [switch]$Help
+)
+
+if ($Help) {
+  Write-Host @"
+Usage: .\setup.ps1 [options]
+
+Options:
+  -DryRun       Print actions without executing them.
+  -Incremental  Update in place, keep global OpenCode state (default).
+  -Reset        Wipe global OpenCode config/data/cache before rebuild.
+  -Uninstall    Restore the newest backup and exit.
+  -Doctor       Run diagnostics and exit.
+  -Help         Show this message.
+"@
+  exit 0
+}
+
+if ($Reset -and $Incremental) {
+  Write-Error 'Choose -Reset OR -Incremental, not both.'
+  exit 1
+}
+
+$Mode = if ($Reset) { 'reset' } else { 'incremental' }
+
 $ErrorActionPreference = 'Stop'
 
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$NamanDir = Join-Path $RootDir 'naman'
-$ShahilPortableDir = Join-Path $RootDir 'shahil\portable'
+$HarnessDir = Join-Path $RootDir 'harness'
 $StackManifestPath = Join-Path $RootDir 'stack\manifest.json'
 $VersionsPath = Join-Path $RootDir 'versions.json'
 
+# ── helper: wrap destructive actions for dry-run ──────────────────────────────
+function Invoke-Action {
+  param([string]$Description, [scriptblock]$Action)
+  if ($DryRun) {
+    Write-Host "[dry-run] $Description"
+  } else {
+    & $Action
+  }
+}
+
+# ── helper: prompt before writing to User PATH ────────────────────────────────
 function Ensure-PathContains {
   param([string]$Dir)
 
@@ -25,35 +66,16 @@ function Ensure-PathContains {
   }
 
   if ($userEntries -notcontains $Dir) {
-    $newUserPath = if ([string]::IsNullOrWhiteSpace($userPath)) { $Dir } else { "$userPath;$Dir" }
-    [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
-  }
-}
-
-function Resolve-ClaudeCommand {
-  $cmd = Get-Command claude -ErrorAction SilentlyContinue
-  if ($cmd) {
-    return $cmd.Source
-  }
-
-  $candidates = @(
-    (Join-Path $HOME '.local\bin\claude.exe'),
-    (Join-Path $HOME '.local\bin\claude.cmd'),
-    (Join-Path $HOME '.local\bin\claude')
-  )
-
-  foreach ($candidate in $candidates) {
-    if (Test-Path $candidate) {
-      Ensure-PathContains (Split-Path -Parent $candidate)
-      $cmd = Get-Command claude -ErrorAction SilentlyContinue
-      if ($cmd) {
-        return $cmd.Source
+    if (-not $DryRun) {
+      $answer = Read-Host "Add '$Dir' to your permanent User PATH? [y/N]"
+      if ($answer -match '^[Yy]$') {
+        $newUserPath = if ([string]::IsNullOrWhiteSpace($userPath)) { $Dir } else { "$userPath;$Dir" }
+        [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
       }
-      return $candidate
+    } else {
+      Write-Host "[dry-run] would prompt to add '$Dir' to User PATH"
     }
   }
-
-  return $null
 }
 
 function Read-JsonObject {
@@ -244,17 +266,19 @@ function Install-OpenCodeDesktop {
   $url = "https://github.com/anomalyco/opencode/releases/download/v$version/$asset"
   $installerPath = Join-Path $env:TEMP $asset
 
-  Write-Host "Installing OpenCode desktop ($asset)"
-  Invoke-WebRequest -Uri $url -OutFile $installerPath
-  Start-Process -FilePath $installerPath -ArgumentList '/S' -Wait
-  Remove-Item -Force $installerPath -ErrorAction SilentlyContinue
+  Invoke-Action "Download and install OpenCode desktop ($asset)" {
+    Write-Host "Installing OpenCode desktop ($asset)"
+    Invoke-WebRequest -Uri $url -OutFile $installerPath
+    Start-Process -FilePath $installerPath -ArgumentList '/S' -Wait
+    Remove-Item -Force $installerPath -ErrorAction SilentlyContinue
 
-  $installed = Resolve-OpenCodeDesktopPath
-  if (-not $installed) {
-    throw 'OpenCode desktop install completed, but the desktop app was not found in the expected Windows install locations.'
+    $installed = Resolve-OpenCodeDesktopPath
+    if (-not $installed) {
+      throw 'OpenCode desktop install completed, but the desktop app was not found in the expected Windows install locations.'
+    }
+
+    Write-Host "OpenCode desktop installed ($installed)"
   }
-
-  Write-Host "OpenCode desktop installed ($installed)"
 }
 
 function Assert-NodeVersion {
@@ -307,15 +331,32 @@ function Assert-NodeVersion {
   Write-Host "node version ok ($raw)"
 }
 
+# ── helper: backup retention (keep newest N, prune older) ─────────────────────
+function Invoke-BackupRetention {
+  param([string]$BackupRoot)
+  if (-not (Test-Path $BackupRoot)) { return }
+  $keep = [int]($env:HARNESS_BACKUP_RETENTION ?? '5')
+  $dirs = Get-ChildItem -Path $BackupRoot -Directory | Sort-Object Name -Descending
+  if ($dirs.Count -gt $keep) {
+    $toRemove = $dirs | Select-Object -Skip $keep
+    foreach ($dir in $toRemove) {
+      Write-Host "[backup retention] removing old backup: $($dir.FullName)" -ForegroundColor DarkGray
+      Invoke-Action "remove old backup $($dir.FullName)" { Remove-Item -Recurse -Force $dir.FullName }
+    }
+  }
+}
+
 function Write-ProjectConfig {
-  $envFile = Join-Path $NamanDir '.env.team'
+  $envFile = Join-Path $HarnessDir '.env.team'
   if (-not (Test-Path $envFile)) {
-    Copy-Item (Join-Path $NamanDir 'templates\.env.team.example') $envFile
+    Invoke-Action "copy .env.team.example -> .env.team" {
+      Copy-Item (Join-Path $HarnessDir 'templates\.env.team.example') $envFile
+    }
   }
 
-  $template = Read-JsonObject (Join-Path $NamanDir 'templates\opencode.template.jsonc')
+  $template = Read-JsonObject (Join-Path $HarnessDir 'templates\opencode.template.jsonc')
   $manifest = Read-JsonObject $StackManifestPath
-  $globalTemplate = Read-JsonObject (Join-Path $NamanDir 'templates\opencode.template.jsonc')
+  $globalTemplate = Read-JsonObject (Join-Path $HarnessDir 'templates\opencode.template.jsonc')
 
   $mcp = [ordered]@{}
   foreach ($property in $manifest.sharedMcp.PSObject.Properties) {
@@ -330,7 +371,9 @@ function Write-ProjectConfig {
   $globalTemplate | Add-Member -NotePropertyName mcp -NotePropertyValue $mcp -Force
   $globalTemplate | Add-Member -NotePropertyName plugin -NotePropertyValue @($manifest.opencode.plugins) -Force
 
-  ($template | ConvertTo-Json -Depth 20) + "`n" | Set-Content -Path (Join-Path $RootDir 'opencode.jsonc')
+  Invoke-Action "write opencode.jsonc" {
+    ($template | ConvertTo-Json -Depth 20) + "`n" | Set-Content -Path (Join-Path $RootDir 'opencode.jsonc')
+  }
 
   $globalOpenCodeDir = if ($env:OPENCODE_CONFIG_DIR) { $env:OPENCODE_CONFIG_DIR } else { Join-Path $HOME '.config\opencode' }
   $globalOpenCodeStateDirs = @(
@@ -339,40 +382,58 @@ function Write-ProjectConfig {
     @{ path = (Join-Path $env:LOCALAPPDATA 'opencode'); name = 'localappdata' },
     @{ path = (Join-Path $HOME '.local\share\opencode'); name = 'localshare' }
   )
-  $globalBackupRoot = Join-Path $HOME '.config\opencode-delta-ai-harness-backups'
+  $globalBackupRoot = Join-Path $HOME '.config\opencode-harness-backups'
   $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
   $globalBackupDir = Join-Path $globalBackupRoot $timestamp
 
   foreach ($entry in $globalOpenCodeStateDirs) {
     if (Test-Path $entry.path) {
-      New-Item -ItemType Directory -Force -Path $globalBackupRoot | Out-Null
-      New-Item -ItemType Directory -Force -Path $globalBackupDir | Out-Null
-      Copy-Item -Recurse $entry.path (Join-Path $globalBackupDir $entry.name)
-      Remove-Item -Recurse -Force $entry.path
+      Invoke-Action "backup $($entry.path) -> $globalBackupDir\$($entry.name)" {
+        New-Item -ItemType Directory -Force -Path $globalBackupRoot | Out-Null
+        New-Item -ItemType Directory -Force -Path $globalBackupDir | Out-Null
+        Copy-Item -Recurse $entry.path (Join-Path $globalBackupDir $entry.name)
+      }
+      if ($Mode -eq 'reset') {
+        Invoke-Action "remove $($entry.path) (reset mode)" {
+          Remove-Item -Recurse -Force $entry.path
+        }
+      }
     }
   }
 
-  New-Item -ItemType Directory -Force -Path $globalOpenCodeDir | Out-Null
-  ($globalTemplate | ConvertTo-Json -Depth 20) + "`n" | Set-Content -Path (Join-Path $globalOpenCodeDir 'opencode.json')
+  Invoke-BackupRetention $globalBackupRoot
+
+  Invoke-Action "create $globalOpenCodeDir" {
+    New-Item -ItemType Directory -Force -Path $globalOpenCodeDir | Out-Null
+  }
+  Invoke-Action "write global opencode.json" {
+    ($globalTemplate | ConvertTo-Json -Depth 20) + "`n" | Set-Content -Path (Join-Path $globalOpenCodeDir 'opencode.json')
+  }
 
   $projectOpenCode = Join-Path $RootDir '.opencode'
   $projectSkills = Join-Path $projectOpenCode 'skills'
   $globalSkills = Join-Path $globalOpenCodeDir 'skills'
-  New-Item -ItemType Directory -Force -Path $projectSkills | Out-Null
-  New-Item -ItemType Directory -Force -Path $globalSkills | Out-Null
-
-  if (Test-Path $projectSkills) {
-    Get-ChildItem -Path $projectSkills | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  Invoke-Action "create skills dirs" {
+    New-Item -ItemType Directory -Force -Path $projectSkills | Out-Null
+    New-Item -ItemType Directory -Force -Path $globalSkills | Out-Null
   }
-  if (Test-Path $globalSkills) {
-    Get-ChildItem -Path $globalSkills | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+  Invoke-Action "clear existing project skills" {
+    if (Test-Path $projectSkills) {
+      Get-ChildItem -Path $projectSkills | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
+  Invoke-Action "clear existing global skills" {
+    if (Test-Path $globalSkills) {
+      Get-ChildItem -Path $globalSkills | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
 
   foreach ($sourceRel in $manifest.opencode.projectSkillsSources) {
     $source = Join-Path $RootDir $sourceRel
     Get-ChildItem -Path $source -Directory | ForEach-Object {
       $target = Join-Path $projectSkills $_.Name
-      Copy-Item -Recurse $_.FullName $target
+      Invoke-Action "copy project skill $($_.Name)" { Copy-Item -Recurse $_.FullName $target }
     }
   }
 
@@ -380,82 +441,13 @@ function Write-ProjectConfig {
     $source = Join-Path $RootDir $sourceRel
     Get-ChildItem -Path $source -Directory | ForEach-Object {
       $target = Join-Path $globalSkills $_.Name
-      Copy-Item -Recurse $_.FullName $target
+      Invoke-Action "copy global skill $($_.Name)" { Copy-Item -Recurse $_.FullName $target }
     }
   }
 
-  if (Test-Path $globalBackupDir) {
+  if (-not $DryRun -and (Test-Path $globalBackupDir)) {
     Write-Host "backed up prior global OpenCode state to $globalBackupDir"
   }
-}
-
-function Write-ClaudeHome {
-  $claudeHome = if ($env:CLAUDE_HOME_DIR) { $env:CLAUDE_HOME_DIR } else { Join-Path $HOME '.claude' }
-  $backupRoot = Join-Path $claudeHome '.delta-ai-harness-backups'
-  $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-  $backupDir = Join-Path $backupRoot $timestamp
-  New-Item -ItemType Directory -Force -Path $claudeHome | Out-Null
-
-  function Backup-IfExists($path, $name) {
-    if (Test-Path $path) {
-      New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
-      Copy-Item -Recurse $path (Join-Path $backupDir $name)
-    }
-  }
-
-  foreach ($name in @('hooks', 'rules', 'commands', 'agents', 'agent_docs', 'scaffold')) {
-    $source = Join-Path $ShahilPortableDir $name
-    $target = Join-Path $claudeHome $name
-    Backup-IfExists $target $name
-    if (Test-Path $target) {
-      Remove-Item -Recurse -Force $target
-    }
-    Copy-Item -Recurse $source $target
-  }
-
-  New-Item -ItemType Directory -Force -Path (Join-Path $claudeHome 'scripts') | Out-Null
-  Backup-IfExists (Join-Path $claudeHome 'scripts\scaffold.sh') 'scripts-scaffold.sh'
-  Copy-Item (Join-Path $ShahilPortableDir 'scripts\scaffold.sh') (Join-Path $claudeHome 'scripts\scaffold.sh') -Force
-
-  $settingsObj = Read-JsonObject (Join-Path $ShahilPortableDir 'settings.template.json')
-  $cavememPath = if ($env:CAVEMEM_PATH) { $env:CAVEMEM_PATH } else { '{{CAVEMEM_PATH}}' }
-  $settingsObj = Replace-TemplateTokens -Value $settingsObj -Tokens @{
-    '{{HOME}}' = $HOME
-    '{{CAVEMEM_PATH}}' = $cavememPath
-  }
-  $manifest = Read-JsonObject $StackManifestPath
-  $settingsObj.enabledPlugins = $manifest.claude.enabledPlugins
-  Backup-IfExists (Join-Path $claudeHome 'settings.json') 'settings.json'
-  ($settingsObj | ConvertTo-Json -Depth 20) + "`n" | Set-Content -Path (Join-Path $claudeHome 'settings.json')
-
-  if (Test-Path $backupDir) {
-    Write-Host "backed up prior Claude files to $backupDir"
-  }
-}
-
-function Validate-ClaudeSetup {
-  $claudeHome = if ($env:CLAUDE_HOME_DIR) { $env:CLAUDE_HOME_DIR } else { Join-Path $HOME '.claude' }
-  $requiredPaths = @(
-    (Join-Path $claudeHome 'settings.json'),
-    (Join-Path $claudeHome 'hooks\check-generated-files.sh'),
-    (Join-Path $claudeHome 'commands\status.md'),
-    (Join-Path $claudeHome 'rules\search-first.md'),
-    (Join-Path $claudeHome 'scripts\scaffold.sh')
-  )
-
-  foreach ($path in $requiredPaths) {
-    if (-not (Test-Path $path)) {
-      throw "Missing required Claude path: $path"
-    }
-  }
-
-  Get-Content (Join-Path $claudeHome 'settings.json') -Raw | ConvertFrom-Json | Out-Null
-
-  Write-Host 'claude settings present'
-  Write-Host 'claude hooks present'
-  Write-Host 'claude commands present'
-  Write-Host 'claude rules present'
-  Write-Host 'claude settings valid json'
 }
 
 function Install-McpDeps {
@@ -463,10 +455,14 @@ function Install-McpDeps {
   Ensure-NpmGlobalBinInPath
   if (Get-Command npm -ErrorAction SilentlyContinue) {
     if (-not (Get-Command context-mode -ErrorAction SilentlyContinue)) {
-      npm install -g ("context-mode@" + $versions.mcp.'context-mode')
+      Invoke-Action "npm install -g context-mode@$($versions.mcp.'context-mode')" {
+        npm install -g ("context-mode@" + $versions.mcp.'context-mode')
+      }
     }
     if (-not (Get-Command context7-mcp -ErrorAction SilentlyContinue)) {
-      npm install -g ("@upstash/context7-mcp@" + $versions.mcp.'context7-mcp')
+      Invoke-Action "npm install -g @upstash/context7-mcp@$($versions.mcp.'context7-mcp')" {
+        npm install -g ("@upstash/context7-mcp@" + $versions.mcp.'context7-mcp')
+      }
     }
     Ensure-NpmGlobalBinInPath
     return
@@ -551,64 +547,170 @@ function Install-OpenCode {
   }
 
   if (Get-Command scoop -ErrorAction SilentlyContinue) {
-    if ($needsRepair) {
-      scoop uninstall opencode *> $null
+    Invoke-Action "scoop install opencode" {
+      if ($needsRepair) {
+        scoop uninstall opencode *> $null
+      }
+      scoop install opencode
     }
-    scoop install opencode
     return
   }
 
   if (Get-Command choco -ErrorAction SilentlyContinue) {
-    if ($needsRepair) {
-      choco install opencode --force -y
-    } else {
-      choco install opencode -y
+    Invoke-Action "choco install opencode" {
+      if ($needsRepair) {
+        choco install opencode --force -y
+      } else {
+        choco install opencode -y
+      }
+      Ensure-OpenCodePathContainsCommonLocations
     }
-    Ensure-OpenCodePathContainsCommonLocations
     return
   }
 
   if (Get-Command npm -ErrorAction SilentlyContinue) {
-    Ensure-NpmGlobalBinInPath
-    if ($existing) {
-      npm uninstall -g opencode-ai *> $null
+    Invoke-Action "npm install -g opencode-ai@$($versions.opencode.npm)" {
+      Ensure-NpmGlobalBinInPath
+      if ($existing) {
+        npm uninstall -g opencode-ai *> $null
+      }
+      npm install -g ("opencode-ai@" + $versions.opencode.npm)
+      Ensure-NpmGlobalBinInPath
     }
-    npm install -g ("opencode-ai@" + $versions.opencode.npm)
-    Ensure-NpmGlobalBinInPath
     return
   }
 
   throw 'Unable to install OpenCode automatically on Windows. Install Scoop, Chocolatey, or npm first.'
 }
 
-function Install-ClaudeCode {
-  $claudePath = Resolve-ClaudeCommand
-  if ($claudePath) {
-    Write-Host "claude already installed ($claudePath)"
-    return
+# ── prereq check ──────────────────────────────────────────────────────────────
+function Test-Prereqs {
+  $versions = Read-JsonObject $VersionsPath
+  $requiredMajor = [int]$versions.node.major
+  $failed = $false
+
+  $checks = @(
+    @{ name = 'python'; test = { Get-Command python -ErrorAction SilentlyContinue } },
+    @{ name = 'node';   test = {
+      $n = Get-Command node -ErrorAction SilentlyContinue
+      if (-not $n) { return $false }
+      $raw = node -p "process.versions.node" 2>$null
+      [int]($raw.Split('.')[0]) -ge $requiredMajor
+    }},
+    @{ name = 'npm';    test = { Get-Command npm -ErrorAction SilentlyContinue } },
+    @{ name = 'curl';   test = { Get-Command curl -ErrorAction SilentlyContinue } }
+  )
+
+  foreach ($check in $checks) {
+    $ok = & $check.test
+    if (-not $ok) {
+      Write-Error "Missing prerequisite: $($check.name). Install it and re-run setup."
+      $failed = $true
+    }
   }
 
-  Write-Host 'claude not found; installing Claude Code with official installer'
-  irm https://claude.ai/install.ps1 | iex
+  if ($failed) { exit 1 }
+}
 
-  $claudePath = Resolve-ClaudeCommand
-  if (-not $claudePath) {
-    throw 'Claude Code install completed, but the claude command is still unavailable. Restart PowerShell and re-run setup.'
+# ── uninstall ─────────────────────────────────────────────────────────────────
+function Invoke-Uninstall {
+  $backupRoot = Join-Path $HOME '.config\opencode-harness-backups'
+  if (-not (Test-Path $backupRoot)) {
+    Write-Error 'no backups found; nothing to uninstall'
+    exit 1
   }
 
-  Write-Host "claude installed ($claudePath)"
+  $newest = Get-ChildItem -Path $backupRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+  if (-not $newest) {
+    Write-Error 'no backups found; nothing to uninstall'
+    exit 1
+  }
+
+  $restoreMap = @(
+    @{ name = 'config';     dest = Join-Path $HOME '.config\opencode' },
+    @{ name = 'localshare'; dest = Join-Path $HOME '.local\share\opencode' },
+    @{ name = 'appdata';    dest = Join-Path $env:APPDATA 'opencode' },
+    @{ name = 'localappdata'; dest = Join-Path $env:LOCALAPPDATA 'opencode' }
+  )
+
+  foreach ($entry in $restoreMap) {
+    $src = Join-Path $newest.FullName $entry.name
+    if (Test-Path $src) {
+      Invoke-Action "restore $($entry.dest) from $src" {
+        if (Test-Path $entry.dest) { Remove-Item -Recurse -Force $entry.dest }
+        Copy-Item -Recurse $src $entry.dest
+        Write-Host "restored $($entry.dest)"
+      }
+    }
+  }
+}
+
+# ── doctor ────────────────────────────────────────────────────────────────────
+function Invoke-Doctor {
+  $versions = Read-JsonObject $VersionsPath
+  $allGreen = $true
+
+  $tools = @(
+    @{ name = 'python'; cmd = 'python' },
+    @{ name = 'node';   cmd = 'node' },
+    @{ name = 'npm';    cmd = 'npm' },
+    @{ name = 'curl';   cmd = 'curl' }
+  )
+  foreach ($t in $tools) {
+    if (Get-Command $t.cmd -ErrorAction SilentlyContinue) {
+      Write-Host "[OK]   $($t.name) found: $((Get-Command $t.cmd).Source)"
+    } else {
+      Write-Host "[FAIL] $($t.name) not found"
+      $allGreen = $false
+    }
+  }
+
+  # version comparison
+  foreach ($tool in @('opencode', 'context-mode', 'context7-mcp')) {
+    $cmd = Get-Command $tool -ErrorAction SilentlyContinue
+    if ($cmd) {
+      Write-Host "[OK]   $tool installed: $($cmd.Source)"
+    } else {
+      Write-Host "[WARN] $tool not installed (required after setup)"
+    }
+  }
+
+  # writable dirs
+  $dirs = @(
+    (Join-Path $HOME '.config\opencode'),
+    (Join-Path $HOME '.local\share\opencode'),
+    (Join-Path $HOME '.config\opencode-harness-backups')
+  )
+  foreach ($dir in $dirs) {
+    if (Test-Path $dir) {
+      Write-Host "[OK]   $dir exists"
+    } else {
+      Write-Host "[WARN] $dir does not exist yet (created on first setup)"
+    }
+  }
+
+  if ($allGreen) { exit 0 } else { exit 1 }
+}
+
+# ── entry point ───────────────────────────────────────────────────────────────
+Test-Prereqs
+
+if ($Uninstall) {
+  Invoke-Uninstall
+  exit 0
+}
+if ($Doctor) {
+  Invoke-Doctor
+  exit 0
 }
 
 Install-OpenCode
 Install-OpenCodeDesktop
-Install-ClaudeCode
 Assert-NodeVersion
 Install-McpDeps
 Write-ProjectConfig
 Validate-Setup
-Write-ClaudeHome
-Validate-ClaudeSetup
 
 Write-Host ''
 Write-Host 'Setup complete.'
-Write-Host "Next: review $NamanDir/.env.team, then run opencode from this repo root or Claude Code with ~/.claude."
+Write-Host "Next: review $HarnessDir/.env.team, then run opencode from this repo root."

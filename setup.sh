@@ -2,11 +2,48 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NAMAN_DIR="$ROOT_DIR/naman"
+HARNESS_DIR="$ROOT_DIR/harness"
 VERSIONS_PATH="$ROOT_DIR/versions.json"
-if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
-  printf 'Usage: ./setup.sh\n' >&2
-  exit 1
+
+DRY_RUN=0
+MODE="incremental"
+UNINSTALL=0
+DOCTOR=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --reset) MODE="reset"; shift ;;
+    --incremental) MODE="incremental"; shift ;;
+    --uninstall) UNINSTALL=1; shift ;;
+    --doctor) DOCTOR=1; shift ;;
+    -h|--help)
+      cat <<EOF
+Usage: ./setup.sh [options]
+
+Options:
+  --dry-run       Print actions without executing them.
+  --incremental   Update in place, keep global OpenCode state (default).
+  --reset         Wipe global OpenCode config/data/cache before rebuild.
+  --uninstall     Restore the newest backup and exit.
+  --doctor        Run diagnostics and exit.
+  -h, --help      Show this message.
+EOF
+      exit 0 ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; exit 1 ;;
+  esac
+done
+
+export DRY_RUN MODE
+
+bash "$HARNESS_DIR/scripts/check-prereqs.sh" || exit 1
+
+if [ "$UNINSTALL" = "1" ]; then
+  bash "$HARNESS_DIR/scripts/uninstall.sh" ${DRY_RUN:+--dry-run}
+  exit $?
+fi
+if [ "$DOCTOR" = "1" ]; then
+  bash "$HARNESS_DIR/scripts/doctor.sh"
+  exit $?
 fi
 
 install_opencode_desktop() {
@@ -72,29 +109,17 @@ PY
 }
 
 printf '==> Install OpenCode CLI\n'
-bash "$NAMAN_DIR/scripts/install-opencode.sh"
+bash "$HARNESS_DIR/scripts/install-opencode.sh"
 printf '==> Install OpenCode desktop (if needed)\n'
 install_opencode_desktop
-if ! command -v claude >/dev/null 2>&1; then
-  printf 'claude not found; installing Claude Code with official installer\n'
-  curl -fsSL https://claude.ai/install.sh | bash
-  if ! command -v claude >/dev/null 2>&1; then
-    printf 'Claude Code install completed, but the claude command is still unavailable. Restart your shell and re-run setup.\n' >&2
-    exit 1
-  fi
-fi
 printf '==> Ensure Node version\n'
-bash "$NAMAN_DIR/scripts/install-node.sh"
+bash "$HARNESS_DIR/scripts/install-node.sh"
 printf '==> Install MCP dependencies\n'
-bash "$NAMAN_DIR/scripts/install-mcp-deps.sh"
+bash "$HARNESS_DIR/scripts/install-mcp-deps.sh"
 printf '==> Build OpenCode configs and skills\n'
-bash "$NAMAN_DIR/scripts/build-project-opencode.sh"
+bash "$HARNESS_DIR/scripts/build-project-opencode.sh"
 printf '==> Validate OpenCode setup\n'
-bash "$NAMAN_DIR/scripts/validate-setup.sh"
-printf '==> Generate Claude home\n'
-bash "$NAMAN_DIR/scripts/generate-claude-home.sh"
-printf '==> Validate Claude setup\n'
-bash "$NAMAN_DIR/scripts/validate-claude-setup.sh"
+bash "$HARNESS_DIR/scripts/validate-setup.sh"
 
 printf '\nSetup complete.\n'
-printf 'Next: review %s/.env.team, then run opencode from this repo root or Claude Code with ~/.claude.\n' "$NAMAN_DIR"
+printf 'Next: review %s/.env.team, then run opencode from this repo root.\n' "$HARNESS_DIR"

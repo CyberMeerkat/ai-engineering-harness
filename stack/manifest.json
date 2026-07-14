@@ -29,21 +29,11 @@
       "context-mode"
     ],
     "projectSkillsSources": [
-      "naman/skills/opencode"
+      "harness/skills/opencode"
     ],
     "globalSkillsSources": [
-      "naman/skills/opencode",
-      "naman/skills/shared"
+      "harness/skills/opencode",
+      "harness/skills/shared"
     ]
-  },
-  "claude": {
-    "portableSource": "shahil/portable",
-    "enabledPlugins": {
-      "context-mode@context-mode": true,
-      "figma@claude-plugins-official": true,
-      "watch@claude-video": true,
-      "obsidian@obsidian-skills": true,
-      "gopls-lsp@claude-plugins-official": true
-    }
   }
 }

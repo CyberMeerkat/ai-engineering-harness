@@ -3,7 +3,7 @@
 
 # env
 /.env
-/naman/.env.team
+/harness/.env.team
 
 # schemas
 /opencode.jsonc
