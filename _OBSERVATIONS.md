@@ -15,7 +15,7 @@ The handoff's final grep pattern includes `codex` as a match term. This produces
 | `harness/skills/shared/understand-domain/SKILL.md` | same | Same plugin path |
 | `harness/skills/shared/understand/SKILL.md` | same | Same plugin path |
 
-**Recommendation:** Remove `codex` from the final grep pattern in §8 of the handoff (the patterns to watch are `naman`, `shahil`, and `delta[- ]?(ai|studio|library)` — not `codex`). Alternatively, exclude the skills payload directory from the sweep with `:(exclude)harness/skills/`.
+**Recommendation:** Remove `codex` from the final grep pattern. The patterns that matter are the two engineer names and the company name regex — not `codex`. Alternatively, exclude the skills payload directory from the sweep with `:(exclude)harness/skills/`.
 
 ---
 
