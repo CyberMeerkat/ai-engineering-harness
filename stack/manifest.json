@@ -34,6 +34,9 @@
     "globalSkillsSources": [
       "harness/skills/opencode",
       "harness/skills/shared"
+    ],
+    "localPluginsSources": [
+      "harness/plugins/local"
     ]
   }
 }

@@ -450,6 +450,29 @@ function Write-ProjectConfig {
     }
   }
 
+  # Local plugins (global only — these are safety hooks meant to protect
+  # every project you work in, not just this repo; global plugins already
+  # load regardless of which project OpenCode is opened from).
+  $globalPlugins = Join-Path $globalOpenCodeDir 'plugins'
+  Invoke-Action "create plugins dir" {
+    New-Item -ItemType Directory -Force -Path $globalPlugins | Out-Null
+  }
+  Invoke-Action "clear existing global plugins" {
+    if (Test-Path $globalPlugins) {
+      Get-ChildItem -Path $globalPlugins | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
+  if ($manifest.opencode.localPluginsSources) {
+    foreach ($sourceRel in $manifest.opencode.localPluginsSources) {
+      $source = Join-Path $RootDir $sourceRel
+      if (-not (Test-Path $source)) { continue }
+      Get-ChildItem -Path $source -File | Where-Object { $_.Extension -in '.mjs', '.js' } | ForEach-Object {
+        $target = Join-Path $globalPlugins $_.Name
+        Invoke-Action "copy plugin $($_.Name)" { Copy-Item $_.FullName $target }
+      }
+    }
+  }
+
   if (-not $DryRun -and (Test-Path $globalBackupDir)) {
     Write-Host "backed up prior global OpenCode state to $globalBackupDir"
   }
@@ -509,7 +532,8 @@ function Validate-Setup {
     (Join-Path $RootDir 'opencode.jsonc'),
     (Join-Path $RootDir '.opencode\skills\frontend-design\SKILL.md'),
     (Join-Path $HOME '.config\opencode\opencode.json'),
-    (Join-Path $HOME '.config\opencode\skills\understand\SKILL.md')
+    (Join-Path $HOME '.config\opencode\skills\understand\SKILL.md'),
+    (Join-Path $HOME '.config\opencode\plugins\check-secrets.mjs')
   )
 
   foreach ($path in $requiredPaths) {
@@ -534,6 +558,7 @@ function Validate-Setup {
   Write-Host 'project config present'
   Write-Host 'core repo-managed OpenCode skills present'
   Write-Host 'global app bundle present'
+  Write-Host 'local security plugins present'
 }
 
 function Install-OpenCode {

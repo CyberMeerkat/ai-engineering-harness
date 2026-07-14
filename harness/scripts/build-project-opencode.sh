@@ -169,10 +169,41 @@ for item in manifest.get('opencode', {}).get('globalSkillsSources', manifest.get
 PY
 )
 
+# ── local plugins (global only — these are safety hooks meant to protect
+# every project you work in, not just this repo; global plugins already load
+# regardless of which project OpenCode is opened from) ────────────────────────
+run rm -rf "$GLOBAL_OPENCODE_DIR/plugins"
+run mkdir -p "$GLOBAL_OPENCODE_DIR/plugins"
+
+copy_plugins_flat() {
+  local source_root="$1"
+  local target_root="$2"
+  for plugin_file in "$source_root"/*.mjs "$source_root"/*.js; do
+    [ -f "$plugin_file" ] || continue
+    run cp "$plugin_file" "$target_root/$(basename "$plugin_file")"
+  done
+}
+
+while IFS= read -r source_root; do
+  [ -n "$source_root" ] || continue
+  copy_plugins_flat "$ROOT_DIR/$source_root" "$GLOBAL_OPENCODE_DIR/plugins"
+done < <(python3 - <<'PY' "$STACK_MANIFEST"
+import json
+import sys
+
+with open(sys.argv[1], 'r', encoding='utf-8') as f:
+    manifest = json.load(f)
+
+for item in manifest.get('opencode', {}).get('localPluginsSources', []):
+    print(item)
+PY
+)
+
 printf 'built %s\n' "$PROJECT_ROOT/opencode.jsonc"
 printf 'built %s\n' "$OPENCODE_DIR"
 printf 'built %s\n' "$GLOBAL_OPENCODE_DIR/opencode.json"
 printf 'built %s\n' "$GLOBAL_OPENCODE_DIR/skills"
+printf 'built %s\n' "$GLOBAL_OPENCODE_DIR/plugins"
 if [ -d "$GLOBAL_BACKUP_ROOT/$TIMESTAMP" ]; then
   printf 'backed up prior global OpenCode state to %s\n' "$GLOBAL_BACKUP_ROOT/$TIMESTAMP"
 fi

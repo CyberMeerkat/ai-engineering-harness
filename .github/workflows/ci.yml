@@ -100,3 +100,25 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: .\setup.ps1 -DryRun
+
+  # ── 5. local security plugins: syntax + functional smoke test ──────────────
+  test-plugins:
+    name: Test local security plugins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Syntax-check all local plugin files
+        run: |
+          for f in harness/plugins/local/*.mjs; do
+            echo "checking $f"
+            node --check "$f"
+          done
+
+      - name: Functional smoke test
+        run: node .github/scripts/test-local-plugins.mjs

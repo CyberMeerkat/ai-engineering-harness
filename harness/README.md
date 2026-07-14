@@ -25,6 +25,7 @@ This directory is the source of truth for the harness: a repo-first library that
 | `skills/shared/` | Reusable skills from the `understand-*` family. |
 | `mcp/` | Shared MCP notes and future server definitions. |
 | `plugins/` | Repo-managed plugin manifests and inventory notes. |
+| `plugins/local/` | Local enforcement plugins (secret scanning, generated-file protection, JWT stripping) — installed globally, auto-loaded by OpenCode. |
 | `templates/` | Config templates for local tool setup. |
 | `scripts/build-project-opencode.sh` | Builds project-local `.opencode/` and `opencode.jsonc` from repo templates. |
 | `scripts/install-opencode.sh` | Installs OpenCode on macOS/Linux. |

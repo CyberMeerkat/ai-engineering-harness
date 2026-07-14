@@ -45,6 +45,7 @@ check_file "$PROJECT_ROOT/opencode.jsonc"
 check_file "$PROJECT_ROOT/.opencode/skills/frontend-design/SKILL.md"
 check_file "$HOME/.config/opencode/opencode.json"
 check_file "$HOME/.config/opencode/skills/understand/SKILL.md"
+check_file "$HOME/.config/opencode/plugins/check-secrets.mjs"
 
 python3 - <<'PY' "$PROJECT_ROOT/opencode.jsonc"
 import json
@@ -72,3 +73,4 @@ printf 'required commands execute\n'
 printf 'project config present\n'
 printf 'core repo-managed OpenCode skills present\n'
 printf 'global app bundle present\n'
+printf 'local security plugins present\n'

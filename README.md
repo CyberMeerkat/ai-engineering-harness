@@ -53,6 +53,10 @@ Windows equivalents use `-DryRun`, `-Reset`, `-Uninstall`, `-Doctor` switches on
 | `jira` | remote (Atlassian) | no — requires per-user OAuth |
 | `figma` | remote (local bridge) | no — requires local bridge |
 
+## Security enforcement
+
+Three local OpenCode plugins install globally on every `./setup.sh` run and protect every project you work in, not just this repo: secret-scanning on file writes/edits, generated-file edit protection, and JWT-in-bash-command blocking. See [`harness/plugins/README.md`](harness/plugins/README.md).
+
 ## Layout
 
 ```
@@ -62,7 +66,7 @@ harness/
     opencode/   skills loaded by OpenCode (frontend-design, tailscale-opencode-web)
     shared/     understand-* skill family (codebase analysis, onboarding, domain extraction)
   mcp/          MCP inventory notes; add real MCP servers here
-  plugins/      plugin manifests
+  plugins/      plugin manifests + local/ (security enforcement plugins, installed globally)
   templates/    opencode.template.jsonc, .env.team.example
 stack/
   manifest.json canonical MCP + skill source registry
