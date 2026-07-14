@@ -4,6 +4,19 @@ Items noted during the rework but not acted on (per handoff §9 and §10 "do not
 
 ---
 
+## -1. Phase 6: security plugins, local testing caught 2 more real bugs
+
+Same discipline as §0 (test the actual thing, don't just reason about it), applied to porting 3 of the 4 shahil Claude Code hooks to OpenCode's `tool.execute.before` plugin API (`harness/plugins/local/`). This time Node *was* available locally, so both a `node --check` syntax pass and a 12-case functional smoke test (`.github/scripts/test-local-plugins.mjs`) ran before pushing — and still caught two real bugs local reasoning alone missed:
+
+1. **The smoke test script itself** used `new URL(".", import.meta.url).pathname` for path resolution — mishandles Windows drive letters (produces `/D:/...` with a leading slash, which `path.resolve` then mangles into `C:\D:\...`). Same URL/path class of bug as the earlier installer fixes. Fixed with `fileURLToPath()`.
+2. **`setup.ps1`'s plugin-copy step**: `Get-ChildItem -Path $source -Include '*.mjs','*.js' -File` silently returned **zero results**. `-Include` only filters after `-Path` has been wildcard-expanded; without a trailing `\*` on the path (or `-Recurse`), it's a documented-but-easy-to-miss no-op — no error, no warning, just nothing copied. Would have shipped a feature that installed zero plugins, forever, with no visible failure. Manual re-testing against the real `harness/plugins/local/` directory caught it before push. Fixed with `Get-ChildItem -File | Where-Object { $_.Extension -in '.mjs', '.js' }`.
+
+**Takeaway (reinforcing §0):** syntax-valid and "looks right on read-through" are not the same as "does what it says." Both bugs here were silent — no crash, no error, just wrong behavior. Actually running the code (even a quick manual one-liner against real data, like `Get-ChildItem` against the actual plugin folder) is the only thing that catches this class of bug.
+
+Not ported: `check-destructive-ops.sh` (the 4th original hook) was hardcoded to a different engineer's VPS deploy workflow — not portable as generic content. Skipped per explicit decision.
+
+---
+
 ## 0. Real bugs found and fixed via CI (resolved)
 
 The rework was authored on a Windows host with no bash available, so the bash-side scripts were never actually executed locally — only reasoned through. Publishing to GitHub and letting CI run on real ubuntu/macos/windows runners caught concrete bugs that local review missed:
