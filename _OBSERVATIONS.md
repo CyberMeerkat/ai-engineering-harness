@@ -1,6 +1,23 @@
 # Observations
 
-Items noted during the rework but not acted on (per handoff §9 and §10 "do not improve anything not listed").
+Items noted during the rework but not acted on (per handoff §9 and §10 "do not improve anything not listed"), plus a record of real bugs CI caught after publishing.
+
+---
+
+## 0. Real bugs found and fixed via CI (resolved)
+
+The rework was authored on a Windows host with no bash available, so the bash-side scripts were never actually executed locally — only reasoned through. Publishing to GitHub and letting CI run on real ubuntu/macos/windows runners caught concrete bugs that local review missed:
+
+1. **`declare -A` (bash 4+ only) in `check-prereqs.sh` and `uninstall.sh`** — macOS ships bash 3.2 by default (frozen since 2007 over GPLv3 licensing) and does not support associative arrays. Fixed by replacing with plain named variables / a case-statement lookup function.
+2. **`doctor.sh` piped JSON into `python3 - <<'PY'`** — combining a pipe with `python3 -` (read script from stdin) and a heredoc is broken: the heredoc hijacks stdin for the script source, so `json.load(sys.stdin)` has nothing to read. Fixed by capturing the piped output into a variable and passing the script via `python3 -c` instead.
+3. **`--dry-run` performed real installs** — `install-opencode.sh`, `install-node.sh`, `install-mcp-deps.sh`, and `install_opencode_desktop()` in `setup.sh` had no DRY_RUN awareness at all; they only had "already installed, skip" fast paths. On a clean CI runner (nothing pre-installed), dry-run fell through to the real `npm install -g` / `brew install` / `curl | hdiutil` logic. This was invisible during local testing because opencode/node/mcp deps were already installed on the dev host, so the early-exit paths were the only ones ever exercised.
+4. **`build-project-opencode.sh` sourced `.env.team` unconditionally** — dry-run correctly skips creating the file, but the very next line did `. "$ENV_FILE"` unguarded, crashing the whole script under `set -e` when the file didn't exist. Same bug class as the `setup.ps1 Validate-Setup` fix below, just the bash twin, missed because there was no bash to test against locally.
+5. **`setup.ps1 Assert-NodeVersion`** had the same real-install gap as #3, on the PowerShell side.
+6. **`setup.sh`'s call to `validate-setup.sh`** was unguarded — same bug class as `setup.ps1`'s original `Validate-Setup` issue, just not caught until CI ran the bash path for real.
+
+All six are fixed as of commit `91a2d26`. CI is green across ubuntu-latest, macos-latest, and windows-latest.
+
+**Takeaway:** local review and reasoning caught the *design* of dry-run mode correctly, but only real execution on real bash 3.2 (macOS) and a clean environment (no pre-installed tools) surfaced the actual gaps. Any future changes to the install scripts should be validated by pushing and watching CI, not just by local reasoning on a host where everything is already installed.
 
 ---
 
@@ -33,4 +50,16 @@ The file refers to "team-shareable assets" and "team-authored skills" in its rem
 
 ---
 
-*Generated during the rework execution (Phases 1–5). Review before publishing.*
+## 4. Skill relevance review (personal harness, not team harness)
+
+Two of the three OpenCode-specific skills were originally authored for a team/workplace context and may not fit a personal harness:
+
+- `incident-report-logger` — produces incident reports "for clients, outages, and remediation summaries" in a fixed operational format. This reads as workplace/on-call tooling, not personal dev harness content.
+- `tailscale-opencode-web` — runs OpenCode Web via Tailscale. This is **directly relevant** to the stated goal of using the harness across multiple devices (remote access to a running OpenCode session) — recommend keeping.
+- `frontend-design` — generically useful, no team-specific framing. Recommend keeping.
+
+**Not acted on** — this is a content/curation decision for the harness owner, not a bug. Flagging for a decision.
+
+---
+
+*Generated during the rework execution (Phases 1–5) and the post-publish CI hardening pass. Review before publishing further changes.*
