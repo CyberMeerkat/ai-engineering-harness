@@ -27,6 +27,11 @@ if command -v node >/dev/null 2>&1; then
   fi
 fi
 
+if [ "${DRY_RUN:-0}" = "1" ]; then
+  printf '[dry-run] node %s+ not satisfied; would install via brew/nvm\n' "$NODE_MAJOR_REQUIRED"
+  exit 0
+fi
+
 if command -v brew >/dev/null 2>&1; then
   brew install "$BREW_FORMULA"
   BREW_PREFIX="$(brew --prefix "$BREW_FORMULA")"

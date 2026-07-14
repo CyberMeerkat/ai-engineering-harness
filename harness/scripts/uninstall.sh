@@ -42,14 +42,19 @@ NEWEST="${NEWEST%/}"
 printf 'restoring from backup: %s\n' "$NEWEST"
 
 # ── restore map ────────────────────────────────────────────────────────────────
-declare -A RESTORE_MAP
-RESTORE_MAP[config]="${HOME}/.config/opencode"
-RESTORE_MAP[data]="${HOME}/.local/share/opencode"
-RESTORE_MAP[cache]="${XDG_CACHE_HOME:-$HOME/.cache}/opencode"
+# NOTE: a function-based lookup, not an associative array (declare -A needs
+# bash 4+; macOS ships bash 3.2 by default and does not support it).
+resolve_restore_dest() {
+  case "$1" in
+    config) printf '%s' "${HOME}/.config/opencode" ;;
+    data)   printf '%s' "${HOME}/.local/share/opencode" ;;
+    cache)  printf '%s' "${XDG_CACHE_HOME:-$HOME/.cache}/opencode" ;;
+  esac
+}
 
 for backup_name in config data cache; do
   src="$NEWEST/$backup_name"
-  dest="${RESTORE_MAP[$backup_name]}"
+  dest="$(resolve_restore_dest "$backup_name")"
   if [ -d "$src" ]; then
     if [ -d "$dest" ]; then
       run rm -rf "$dest"

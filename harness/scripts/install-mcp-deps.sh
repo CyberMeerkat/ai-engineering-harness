@@ -24,6 +24,11 @@ install_pkg() {
     return
   fi
 
+  if [ "${DRY_RUN:-0}" = "1" ]; then
+    printf '[dry-run] %s not installed; would run: npm install -g %s\n' "$bin_name" "$npm_package"
+    return
+  fi
+
   if command -v npm >/dev/null 2>&1; then
     npm install -g "$npm_package"
     return

@@ -43,41 +43,44 @@ check_curl() {
 }
 
 # ── evaluate ───────────────────────────────────────────────────────────────────
+# NOTE: plain named variables, not associative arrays (declare -A needs bash 4+;
+# macOS ships bash 3.2 by default and does not support it).
 FAIL=0
 
-declare -A RESULTS
-RESULTS[python3]=$(check_python3 && echo ok || echo fail)
-RESULTS[node]=$(check_node && echo "ok (node $(node -p 'process.versions.node' 2>/dev/null))" || echo "fail (need ${NODE_MAJOR_REQUIRED}+)")
-RESULTS[npm]=$(check_npm && echo ok || echo fail)
-RESULTS[curl]=$(check_curl && echo ok || echo fail)
+RESULT_PYTHON3=$(check_python3 && echo ok || echo fail)
+RESULT_NODE=$(check_node && echo "ok (node $(node -p 'process.versions.node' 2>/dev/null))" || echo "fail (need ${NODE_MAJOR_REQUIRED}+)")
+RESULT_NPM=$(check_npm && echo ok || echo fail)
+RESULT_CURL=$(check_curl && echo ok || echo fail)
 
-for key in python3 node npm curl; do
-  if [[ "${RESULTS[$key]}" == fail* ]]; then
-    FAIL=1
-  fi
-done
+case "$RESULT_PYTHON3" in fail*) FAIL=1 ;; esac
+case "$RESULT_NODE" in fail*) FAIL=1 ;; esac
+case "$RESULT_NPM" in fail*) FAIL=1 ;; esac
+case "$RESULT_CURL" in fail*) FAIL=1 ;; esac
 
 # ── output ─────────────────────────────────────────────────────────────────────
 if [ "$JSON_MODE" = "1" ]; then
   printf '{\n'
-  printf '  "python3": "%s",\n' "${RESULTS[python3]}"
-  printf '  "node": "%s",\n' "${RESULTS[node]}"
-  printf '  "npm": "%s",\n' "${RESULTS[npm]}"
-  printf '  "curl": "%s",\n' "${RESULTS[curl]}"
+  printf '  "python3": "%s",\n' "$RESULT_PYTHON3"
+  printf '  "node": "%s",\n' "$RESULT_NODE"
+  printf '  "npm": "%s",\n' "$RESULT_NPM"
+  printf '  "curl": "%s",\n' "$RESULT_CURL"
   printf '  "ok": %s\n' "$([ "$FAIL" -eq 0 ] && echo true || echo false)"
   printf '}\n'
   exit "$FAIL"
 fi
 
 # human-readable output
-for key in python3 node npm curl; do
-  val="${RESULTS[$key]}"
-  if [[ "$val" == ok* ]]; then
-    printf '[OK]   %s: %s\n' "$key" "$val"
-  else
-    printf '[FAIL] %s: %s\n' "$key" "$val" >&2
-  fi
-done
+report_line() {
+  local key="$1" val="$2"
+  case "$val" in
+    ok*) printf '[OK]   %s: %s\n' "$key" "$val" ;;
+    *)   printf '[FAIL] %s: %s\n' "$key" "$val" >&2 ;;
+  esac
+}
+report_line python3 "$RESULT_PYTHON3"
+report_line node "$RESULT_NODE"
+report_line npm "$RESULT_NPM"
+report_line curl "$RESULT_CURL"
 
 if [ "$FAIL" -ne 0 ]; then
   printf '\nMissing prerequisites above. Install them and re-run setup.\n' >&2

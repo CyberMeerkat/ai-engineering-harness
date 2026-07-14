@@ -21,6 +21,11 @@ if opencode_works; then
   exit 0
 fi
 
+if [ "${DRY_RUN:-0}" = "1" ]; then
+  printf '[dry-run] opencode not installed; would install opencode-ai@%s via brew/npm/bun/pnpm/yarn\n' "$OPENCODE_NPM_VERSION"
+  exit 0
+fi
+
 case "$(uname -s)" in
   Darwin)
     if command -v brew >/dev/null 2>&1; then

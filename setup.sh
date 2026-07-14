@@ -63,6 +63,11 @@ install_opencode_desktop() {
     return 0
   fi
 
+  if [ "${DRY_RUN:-0}" = "1" ]; then
+    printf '[dry-run] OpenCode desktop not installed; would download and install it\n'
+    return 0
+  fi
+
   local arch asset version base_url tmp_dir dmg_path mount_point app_target_dir
   arch="$(uname -m)"
   if [ "$arch" = "arm64" ]; then
@@ -122,8 +127,12 @@ printf '==> Install MCP dependencies\n'
 bash "$HARNESS_DIR/scripts/install-mcp-deps.sh"
 printf '==> Build OpenCode configs and skills\n'
 bash "$HARNESS_DIR/scripts/build-project-opencode.sh"
-printf '==> Validate OpenCode setup\n'
-bash "$HARNESS_DIR/scripts/validate-setup.sh"
+if [ "$DRY_RUN" = "0" ]; then
+  printf '==> Validate OpenCode setup\n'
+  bash "$HARNESS_DIR/scripts/validate-setup.sh"
+else
+  printf '[dry-run] would run validation checks\n'
+fi
 
 printf '\nSetup complete.\n'
 printf 'Next: review %s/.env.team, then run opencode from this repo root.\n' "$HARNESS_DIR"

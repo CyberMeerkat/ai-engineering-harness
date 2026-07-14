@@ -296,6 +296,11 @@ function Assert-NodeVersion {
     }
   }
 
+  if ($DryRun) {
+    Write-Host "[dry-run] node $requiredMajor+ not satisfied; would install via winget/choco/scoop/nvm"
+    return
+  }
+
   if (Get-Command winget -ErrorAction SilentlyContinue) {
     winget install --id $versions.node.wingetId --accept-source-agreements --accept-package-agreements
     Start-Sleep -Seconds 2
