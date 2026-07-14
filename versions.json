@@ -24,7 +24,7 @@
     "context-mode": "1.0.162",
     "context7-mcp": "latest"
   },
-  "claude": {
-    "install": "native-latest"
+  "harness": {
+    "version": "0.1.0"
   }
 }

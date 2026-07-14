@@ -1,0 +1,4 @@
+# shellcheck config
+disable=SC1090   # non-constant source (nvm.sh etc.)
+disable=SC1091   # source paths that shellcheck cannot follow
+external-sources=true

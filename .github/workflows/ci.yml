@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── 1. shellcheck all .sh files ─────────────────────────────────────────────
+  lint-shell:
+    name: Lint shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: |
+          find . -name '*.sh' -not -path './.git/*' | sort | while IFS= read -r f; do
+            echo "checking $f"
+            shellcheck --severity=warning "$f"
+          done
+
+  # ── 2. PSScriptAnalyzer on setup.ps1 ────────────────────────────────────────
+  lint-powershell:
+    name: Lint PowerShell
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $results = Invoke-ScriptAnalyzer -Path setup.ps1 -Severity Error
+          if ($results) {
+            $results | Format-Table -AutoSize
+            exit 1
+          }
+          Write-Host "PSScriptAnalyzer: no errors"
+
+  # ── 3. validate all JSON files ──────────────────────────────────────────────
+  validate-json:
+    name: Validate JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JSON files
+        run: |
+          find . -name '*.json' -not -path './.git/*' | sort | while IFS= read -r f; do
+            echo "checking $f"
+            python3 -m json.tool "$f" > /dev/null
+          done
+
+  # ── 4. dry-run matrix (ubuntu / macos / windows) ────────────────────────────
+  dry-run-matrix:
+    name: Dry-run setup (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read required Node major
+        id: node-version
+        shell: python3 {0}
+        run: |
+          import json, os
+          with open('versions.json') as f:
+              v = json.load(f)
+          major = str(v['node']['major'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'major={major}\n')
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node-version.outputs.major }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Dry-run setup (bash)
+        if: runner.os != 'Windows'
+        run: bash setup.sh --dry-run
+
+      - name: Dry-run setup (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\setup.ps1 -DryRun

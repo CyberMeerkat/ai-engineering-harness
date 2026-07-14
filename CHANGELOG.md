@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [0.1.0] - 2026-07-14
+
+Initial fork from upstream delta-ai-harness (ref sha 24fb9db). See commit history for full rework details.
+
+### Added
+
+- `--dry-run`, `--incremental`, `--reset`, `--uninstall`, `--doctor` flags on `setup.sh` and `setup.ps1`
+- `harness/scripts/check-prereqs.sh` — pre-flight prerequisite check (node, python3, npm, curl)
+- `harness/scripts/uninstall.sh` — restore the newest backup and exit
+- `harness/scripts/doctor.sh` — diagnostic report: versions, PATH health, writable dirs
+- Backup retention: keep newest 5 by default (`HARNESS_BACKUP_RETENTION` overrides)
+- `--incremental` mode (default): update in place without wiping global OpenCode state
+- Pre-flight prerequisite check runs before any destructive action
+- `setup.ps1` `Ensure-PathContains` now prompts before writing to persistent User PATH
+- GitHub Actions CI: shellcheck, PSScriptAnalyzer, JSON validation, dry-run matrix (ubuntu/macos/windows)
+- Root `README.md`, `LICENSE` (MIT), `CHANGELOG.md`, `CONTRIBUTING.md`
+- `.editorconfig` and `.shellcheckrc` for consistent formatting
+
+### Removed
+
+- Claude Code generation pipeline (`shahil/`, `generate-claude-home.sh`, `validate-claude-setup.sh`)
+- Codex CLI artefacts (`codex-config.template.toml`, `codex.plugins.toml`)
+- `naman/mcp/team-mcp/` scaffold (was a bare HTTP server stub, not an MCP)
+- `naman/flows/` empty placeholder
+
+### Changed
+
+- Renamed `naman/` → `harness/`
+- Renamed backup dirs: `.delta-ai-harness-backups` → `.harness-backups`, `opencode-delta-ai-harness-backups` → `opencode-harness-backups`
+- Removed `claude` block from `stack/manifest.json` (OpenCode-only pipeline)
+- `harness/README.md` updated to reflect new name and dropped Claude/Codex references
+- `INSTALL.md` retitled and rewritten for OpenCode-only setup
+- `harness/mcp/README.md` simplified; team-mcp scaffold removed
+- `harness/plugins/README.md` trimmed to OpenCode section only
+- `versions.json` now carries `harness.version = "0.1.0"`
