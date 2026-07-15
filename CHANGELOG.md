@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-07-15
+
+### Added
+
+- **Branching policy.** `harness/rules/branching.md` — always-loaded instructions (via OpenCode's `instructions` config) documenting the feature/fix branch workflow: `feature/<slug>`/`fix/<slug>` branches based on `develop`, pull `develop` first, PRs target `develop`, agents don't merge their own PRs.
+- Enforcement is split across two mechanisms, each used for what it's actually good at:
+  - `stack/manifest.json` → `opencode.globalPermission` — native `permission.bash` "ask" rules for explicit `git push` to a protected branch (`develop`/`dev`/`staging`/`stable`/`main`). Real ask/once/always/reject UX via OpenCode's own permission system.
+  - `harness/plugins/local/protect-branches.mjs` — a narrow plugin backstop for what declarative pattern matching can't see: implicit (no explicit branch name) `git push`, and `git merge` while the current branch is protected (the current-branch condition is never present in the merge command's own text, so there's no declarative alternative for this case at all). Auto-detects whether a repo uses this branching model (checks for a `develop` branch) and is inert otherwise. Supports an explicit `HARNESS_ALLOW_PROTECTED_OP=1` override prefix for cases the user has already authorized in conversation.
+- `stack/manifest.json` gained `opencode.rulesSources` (mirrors `localPluginsSources`) — drop a `.md` file in `harness/rules/` and it's picked up automatically on the next setup run, no per-file registration needed.
+- `project-config.mjs` now copies rules and renders `permission`/`instructions` into the global OpenCode config (project-local config stays minimal, as before).
+- 12 new functional test cases in `.github/scripts/test-local-plugins.mjs` covering `protect-branches.mjs` (explicit vs implicit push, merge, override prefix, compound commands, no-gitflow inertness) using a real git sandbox, not mocks.
+
+### Fixed (found via testing before push, not after)
+
+- `copyRulesFlat()` initially matched *any* `.md` file in the rules source directory, which would have picked up `harness/rules/README.md` itself and loaded it into every session's context as if it were model-facing instruction content. Excluded `README.md` explicitly.
+- A redundant, duplicate dry-run file-listing code path (meant to preview `instructions` accurately) had the same README.md bug and was simply dead code once traced through — `copyRulesFlat()`'s return value already handles both dry-run and real mode correctly. Removed rather than fixed twice.
+
+See `_OBSERVATIONS.md` for further detail on the design tradeoffs (why merge protection can't use declarative "ask" rules at all, and the `--auto` mode caveat).
+
 ## [0.2.0] - 2026-07-14
 
 ### Added

@@ -25,8 +25,12 @@ export function resolveGlobalDirs() {
 /**
  * Renders the opencode template into either a minimal project config or
  * the full global config (with mcp + plugin injected from the manifest).
+ * `ruleFileNames` (global mode only) is the list of rule .md filenames
+ * already copied to ~/.config/opencode/rules/ by the caller — passed in
+ * rather than read here since this function only sees the template path,
+ * not the repo root.
  */
-function renderTemplate(templatePath, manifest, mode) {
+function renderTemplate(templatePath, manifest, mode, ruleFileNames = []) {
   const template = JSON.parse(fs.readFileSync(templatePath, "utf8"));
 
   if (mode === "global") {
@@ -41,6 +45,17 @@ function renderTemplate(templatePath, manifest, mode) {
     }
     template.mcp = mcp;
     template.plugin = manifest.opencode?.plugins || [];
+
+    if (manifest.opencode?.globalPermission) {
+      template.permission = manifest.opencode.globalPermission;
+    }
+
+    if (ruleFileNames.length > 0) {
+      // Relative to this config file's own directory (~/.config/opencode/),
+      // so "rules/<name>.md" resolves correctly regardless of which
+      // project the user currently has open.
+      template.instructions = ruleFileNames.map((name) => `rules/${name}`);
+    }
   }
 
   return template;
@@ -87,6 +102,25 @@ async function copyPluginsFlat(dryRun, sourceRoot, targetRoot) {
 }
 
 /**
+ * Copies every .md file under sourceRoot into targetRoot (always-loaded
+ * rules), except README.md — that's meta-documentation about the folder
+ * itself, not model-facing instruction content, and would otherwise get
+ * loaded into every session's context by mistake.
+ */
+async function copyRulesFlat(dryRun, sourceRoot, targetRoot) {
+  if (!fs.existsSync(sourceRoot)) return [];
+  const entries = fs
+    .readdirSync(sourceRoot, { withFileTypes: true })
+    .filter((e) => e.isFile() && /\.md$/.test(e.name) && e.name.toLowerCase() !== "readme.md");
+  for (const entry of entries) {
+    await action(dryRun, `copy rule ${entry.name}`, () => {
+      fs.copyFileSync(path.join(sourceRoot, entry.name), path.join(targetRoot, entry.name));
+    });
+  }
+  return entries.map((e) => e.name);
+}
+
+/**
  * Main entry point — builds the project-local opencode.jsonc + .opencode/,
  * and the global OpenCode app bundle (~/.config/opencode/). Mirrors
  * build-project-opencode.sh / Write-ProjectConfig exactly, including the
@@ -129,13 +163,27 @@ export async function buildProjectConfig(dryRun, mode, rootDir, manifest, retent
     fs.mkdirSync(dirs.config, { recursive: true });
   });
 
-  // 4. global opencode.json (with mcp/plugin injection)
+  // 4. always-loaded rules: clear then repopulate, before rendering the
+  //    global config below (which needs the resulting filenames for
+  //    `instructions`).
+  const globalRules = path.join(dirs.config, "rules");
+  await action(dryRun, "clear existing global rules", () => {
+    if (fs.existsSync(globalRules)) fs.rmSync(globalRules, { recursive: true, force: true });
+    fs.mkdirSync(globalRules, { recursive: true });
+  });
+  let ruleFileNames = [];
+  for (const sourceRel of manifest.opencode?.rulesSources || []) {
+    const copied = await copyRulesFlat(dryRun, path.join(rootDir, sourceRel), globalRules);
+    ruleFileNames = ruleFileNames.concat(copied);
+  }
+
+  // 5. global opencode.json (with mcp/plugin/permission/instructions injection)
   await action(dryRun, `write global opencode.json`, () => {
-    const globalTemplate = renderTemplate(templatePath, manifest, "global");
+    const globalTemplate = renderTemplate(templatePath, manifest, "global", ruleFileNames);
     writeJson(path.join(dirs.config, "opencode.json"), globalTemplate);
   });
 
-  // 5. skills: clear then repopulate from manifest-declared sources
+  // 6. skills: clear then repopulate from manifest-declared sources
   const projectSkills = path.join(projectOpencodeDir, "skills");
   const globalSkills = path.join(dirs.config, "skills");
 
@@ -159,7 +207,7 @@ export async function buildProjectConfig(dryRun, mode, rootDir, manifest, retent
     await copySkillsFlat(dryRun, path.join(rootDir, sourceRel), globalSkills);
   }
 
-  // 6. local plugins: global only (see harness/plugins/README.md for why)
+  // 7. local plugins: global only (see harness/plugins/README.md for why)
   const globalPlugins = path.join(dirs.config, "plugins");
   await action(dryRun, "clear existing global plugins", () => {
     if (fs.existsSync(globalPlugins)) fs.rmSync(globalPlugins, { recursive: true, force: true });
@@ -172,6 +220,7 @@ export async function buildProjectConfig(dryRun, mode, rootDir, manifest, retent
   console.log(`built ${path.join(rootDir, "opencode.jsonc")}`);
   console.log(`built ${projectOpencodeDir}`);
   console.log(`built ${path.join(dirs.config, "opencode.json")}`);
+  console.log(`built ${globalRules}`);
   console.log(`built ${globalSkills}`);
   console.log(`built ${globalPlugins}`);
 

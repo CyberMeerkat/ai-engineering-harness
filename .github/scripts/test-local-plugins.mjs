@@ -6,6 +6,7 @@
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -78,6 +79,59 @@ async function expectAllowed(hooks, input, output, label) {
   await expectBlocked(hooks, { tool: "bash" }, { args: { command: 'curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0" https://api.example.com' } }, "curl with raw JWT bearer");
   await expectAllowed(hooks, { tool: "bash" }, { args: { command: 'export TOKEN=$(get-token) && curl -H "Authorization: Bearer $TOKEN" https://api.example.com' } }, "JWT via variable (allowed)");
   await expectAllowed(hooks, { tool: "bash" }, { args: { command: "git status" } }, "unrelated bash command (allowed)");
+}
+
+// ── protect-branches.mjs ─────────────────────────────────────────────────────────
+{
+  const { ProtectBranches } = await import(toFileUrl(path.join(PLUGINS_DIR, "protect-branches.mjs")));
+
+  function git(args, cwd) {
+    return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  }
+
+  // Repo WITH gitflow structure (has a develop branch)
+  const gitflowRepo = fs.mkdtempSync(path.join(os.tmpdir(), "ci-test-gitflow-"));
+  git(["init", "-b", "main"], gitflowRepo);
+  git(["config", "user.email", "ci@test.com"], gitflowRepo);
+  git(["config", "user.name", "ci"], gitflowRepo);
+  fs.writeFileSync(path.join(gitflowRepo, "f.txt"), "x");
+  git(["add", "."], gitflowRepo);
+  git(["commit", "-m", "init"], gitflowRepo);
+  git(["checkout", "-b", "develop"], gitflowRepo);
+  git(["checkout", "-b", "feature/test-thing"], gitflowRepo);
+
+  const gitflowHooks = await ProtectBranches({ project: {}, client: {}, $: {}, directory: gitflowRepo, worktree: gitflowRepo });
+
+  await expectAllowed(gitflowHooks, { tool: "bash" }, { args: { command: "git push origin feature/test-thing" } }, "explicit push to feature branch (allowed)");
+  await expectAllowed(gitflowHooks, { tool: "bash" }, { args: { command: "git push origin develop" } }, "EXPLICIT push to develop - deferred to permission.bash ask-rule, plugin allows");
+  await expectAllowed(gitflowHooks, { tool: "bash" }, { args: { command: "git push" } }, "implicit push while on feature branch (allowed)");
+  await expectAllowed(gitflowHooks, { tool: "bash" }, { args: { command: "git merge develop" } }, "merge INTO feature branch, current branch not protected (allowed)");
+
+  git(["checkout", "develop"], gitflowRepo);
+  await expectBlocked(gitflowHooks, { tool: "bash" }, { args: { command: "git push" } }, "implicit bare push while on develop (blocked)");
+  await expectBlocked(gitflowHooks, { tool: "bash" }, { args: { command: "git push origin" } }, "implicit push with remote only, no refspec, while on develop (blocked)");
+  await expectAllowed(gitflowHooks, { tool: "bash" }, { args: { command: "git push origin develop" } }, "EXPLICIT push to develop while ON develop - still deferred to permission.bash");
+  await expectBlocked(gitflowHooks, { tool: "bash" }, { args: { command: "git merge feature/test-thing" } }, "merge INTO develop (current branch is protected)");
+  await expectAllowed(gitflowHooks, { tool: "bash" }, { args: { command: "HARNESS_ALLOW_PROTECTED_OP=1 git push" } }, "override prefix bypasses implicit-push check");
+  await expectAllowed(gitflowHooks, { tool: "bash" }, { args: { command: "HARNESS_ALLOW_PROTECTED_OP=1 git merge feature/test-thing" } }, "override prefix bypasses merge check");
+  await expectBlocked(gitflowHooks, { tool: "bash" }, { args: { command: "git fetch origin && git push" } }, "compound command containing implicit push on develop");
+
+  fs.rmSync(gitflowRepo, { recursive: true, force: true });
+
+  // Repo WITHOUT gitflow structure (no develop branch anywhere) - policy should be inert
+  const noGitflowRepo = fs.mkdtempSync(path.join(os.tmpdir(), "ci-test-no-gitflow-"));
+  git(["init", "-b", "main"], noGitflowRepo);
+  git(["config", "user.email", "ci@test.com"], noGitflowRepo);
+  git(["config", "user.name", "ci"], noGitflowRepo);
+  fs.writeFileSync(path.join(noGitflowRepo, "f.txt"), "x");
+  git(["add", "."], noGitflowRepo);
+  git(["commit", "-m", "init"], noGitflowRepo);
+
+  const noGitflowHooks = await ProtectBranches({ project: {}, client: {}, $: {}, directory: noGitflowRepo, worktree: noGitflowRepo });
+  await expectAllowed(noGitflowHooks, { tool: "bash" }, { args: { command: "git push" } }, "no-gitflow repo: implicit push on main is inert (allowed)");
+  await expectAllowed(noGitflowHooks, { tool: "bash" }, { args: { command: "git merge some-branch" } }, "no-gitflow repo: merge on main is inert (allowed)");
+
+  fs.rmSync(noGitflowRepo, { recursive: true, force: true });
 }
 
 if (failures > 0) {

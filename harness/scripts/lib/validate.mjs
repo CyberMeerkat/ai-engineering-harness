@@ -52,6 +52,8 @@ export function validateSetup(rootDir) {
   requireFile(path.join(dirs.config, "opencode.json"));
   requireFile(path.join(dirs.config, "skills", "understand", "SKILL.md"));
   requireFile(path.join(dirs.config, "plugins", "check-secrets.mjs"));
+  requireFile(path.join(dirs.config, "plugins", "protect-branches.mjs"));
+  requireFile(path.join(dirs.config, "rules", "branching.md"));
 
   // JSON structural checks
   JSON.parse(fs.readFileSync(path.join(rootDir, "opencode.jsonc"), "utf8"));
@@ -62,6 +64,12 @@ export function validateSetup(rootDir) {
   if (!globalConfig.plugin) {
     throw new ValidationError("Global OpenCode app bundle is missing plugin config.");
   }
+  if (!globalConfig.permission?.bash) {
+    throw new ValidationError("Global OpenCode app bundle is missing bash permission config.");
+  }
+  if (!Array.isArray(globalConfig.instructions) || globalConfig.instructions.length === 0) {
+    throw new ValidationError("Global OpenCode app bundle is missing instructions config.");
+  }
 
   console.log("opencode installed");
   console.log("context-mode installed");
@@ -71,6 +79,7 @@ export function validateSetup(rootDir) {
   console.log("core repo-managed OpenCode skills present");
   console.log("global app bundle present");
   console.log("local security plugins present");
+  console.log("always-loaded rules present");
 }
 
 export { ValidationError };

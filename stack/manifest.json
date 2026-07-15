@@ -37,6 +37,19 @@
     ],
     "localPluginsSources": [
       "harness/plugins/local"
-    ]
+    ],
+    "rulesSources": [
+      "harness/rules"
+    ],
+    "globalPermission": {
+      "bash": {
+        "*": "allow",
+        "git push * develop": "ask",
+        "git push * dev": "ask",
+        "git push * staging": "ask",
+        "git push * stable": "ask",
+        "git push * main": "ask"
+      }
+    }
   }
 }

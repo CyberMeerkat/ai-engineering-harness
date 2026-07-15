@@ -4,6 +4,29 @@ Items noted during the rework but not acted on (per handoff §9 and §10 "do not
 
 ---
 
+## -3. Branching policy: why enforcement is split across two mechanisms, and one real bug caught before push
+
+**The design question:** the user asked for agents to be prompted (not hard-blocked) before merging or pushing to `develop`/`dev`/`staging`/`stable`/`main`. Research into OpenCode's actual plugin API (not assumed) surfaced a real constraint: plugins can only `throw` (block) or return normally (allow) from `tool.execute.before` — there is no way for a plugin to trigger OpenCode's native ask/once/always/reject prompt. Only the declarative `permission.bash` config (text-pattern matching) gets that native UX.
+
+This created a genuine, confirmed tradeoff:
+
+| | Native "ask" UX | Runtime logic (auto-detect repo structure, resolve current branch) |
+|---|---|---|
+| Declarative `permission.bash` | Yes | No — static JSON, no conditionals |
+| Plugin (`tool.execute.before`) | No — block or allow only | Yes |
+
+**Resolution — use both, for what each is good at:**
+- **Push with an explicit branch name** (`git push origin develop`) — the destination appears in the command text, so a declarative `"git push * develop": "ask"` pattern (confirmed: `*` is a genuine glob wildcard matching zero-or-more of any character, not a restricted single-position wildcard) correctly triggers the real ask prompt. This covers the vast majority of realistic usage, since naming the branch explicitly is normal git hygiene.
+- **Push with no explicit branch name** (bare `git push`, relies on the current branch's tracked upstream) — text matching cannot resolve this; only a plugin running `git rev-parse --abbrev-ref HEAD` can. Handled by `protect-branches.mjs`, which blocks with a message asking the user to either re-run with an explicit branch name (so the declarative rule catches it properly next time) or use the override prefix.
+- **`git merge`** — the relevant condition is "is the *current* branch protected," which is **never** present in the merge command's own text regardless of what argument is given (`git merge feature/x` merges `feature/x` *into* whatever branch you're currently on — the command text says nothing about that). This means there is no declarative alternative for merge at all, in any form; a `"git merge *": "ask"` rule would fire on every merge regardless of current branch (including harmless merges into a feature branch), which is both wrong and exactly the noisy behaviour the user didn't want. All merge protection goes through the plugin.
+- The plugin deliberately does **not** re-check the explicit-push case that the declarative rule already handles — if it did, it would hard-block a push the user just approved via the native "ask" dialog, since permission approval happens before the tool call reaches `tool.execute.before`.
+
+**Also documented transparently, not silently accepted:** `opencode --auto` mode auto-approves "ask" rules (only explicit "deny" survives auto mode). This policy is a real prompt in normal interactive use, not a guarantee under `--auto`. Flagged to the user and in `harness/plugins/README.md` rather than presented as more airtight than it is.
+
+**Bug caught by testing before push (not by CI, since this needed a local git sandbox to exercise correctly):** `copyRulesFlat()` matched any `.md` file in the rules source directory by extension alone, which would have copied `harness/rules/README.md` itself into `~/.config/opencode/rules/` and added it to the `instructions` array — loading folder meta-documentation into every session's context as if it were a behavioural rule. Caught by testing against a rules directory that (correctly, matching the real repo) contains both `README.md` and `branching.md`, not by testing against an idealized single-file directory. Fixed by excluding `README.md` by name. A second, independent copy of the same buggy filter existed in a redundant dry-run preview code path — removed as dead code rather than fixed twice, since `copyRulesFlat()`'s return value already handles dry-run correctly on its own.
+
+---
+
 ## -2. Phase 4: installer consolidation — 4 real bugs caught by local testing before any push
 
 Consolidated `setup.sh` (bash) + `setup.ps1` (PowerShell) — ~880 combined lines with proven, drift-prone duplication (3 separate rounds of "fix the same bug class in both places" earlier in this session) — into a single Node.js core (`harness/scripts/setup.mjs` + `harness/scripts/lib/*.mjs`), with both launchers reduced to ~90-line Node-bootstrap-only wrappers.

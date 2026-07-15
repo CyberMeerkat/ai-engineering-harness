@@ -55,24 +55,32 @@ Windows equivalents use `-DryRun`, `-Reset`, `-Uninstall`, `-Doctor` switches on
 
 ## Security enforcement
 
-Three local OpenCode plugins install globally on every `./setup.sh` run and protect every project you work in, not just this repo: secret-scanning on file writes/edits, generated-file edit protection, and JWT-in-bash-command blocking. See [`harness/plugins/README.md`](harness/plugins/README.md).
+Four local OpenCode plugins install globally on every `./setup.sh` run and protect every project you work in, not just this repo: secret-scanning on file writes/edits, generated-file edit protection, JWT-in-bash-command blocking, and a branch-protection backstop. See [`harness/plugins/README.md`](harness/plugins/README.md).
+
+## Branching policy
+
+Feature/fix branch workflow, PR conventions, and protected-branch rules (`develop`/`dev`/`staging`/`stable`/`main`) are always loaded into every OpenCode session via `harness/rules/branching.md`. The non-negotiables get real enforcement: native "ask" prompts for explicit pushes to a protected branch, plus a plugin backstop for the cases text-pattern matching can't see (implicit pushes, merging while on a protected branch). See [`harness/rules/README.md`](harness/rules/README.md).
 
 ## Layout
 
 ```
 harness/
-  scripts/      setup helpers + new: check-prereqs, uninstall, doctor
+  scripts/
+    setup.mjs   installer orchestrator (invoked via ../setup.sh / ../setup.ps1)
+    lib/        one module per concern: prereqs, opencode-install, mcp-install,
+                project-config, backup, validate, uninstall, doctor, platform
   skills/
     opencode/   skills loaded by OpenCode (frontend-design, tailscale-opencode-web)
     shared/     understand-* skill family (codebase analysis, onboarding, domain extraction)
   mcp/          MCP inventory notes; add real MCP servers here
-  plugins/      plugin manifests + local/ (security enforcement plugins, installed globally)
+  plugins/      plugin manifests + local/ (security + branch-protection plugins, installed globally)
+  rules/        always-loaded instructions (branching policy), installed globally
   templates/    opencode.template.jsonc, .env.team.example
 stack/
   manifest.json canonical MCP + skill source registry
 versions.json   pinned tool versions
-setup.sh        bash entry point (macOS/Linux/WSL)
-setup.ps1       PowerShell entry point (Windows)
+setup.sh        thin bash launcher (macOS/Linux/WSL) - bootstraps Node, hands off to setup.mjs
+setup.ps1       thin PowerShell launcher (Windows) - same
 ```
 
 ## License
