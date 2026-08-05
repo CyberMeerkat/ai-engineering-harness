@@ -1,0 +1,27 @@
+# Team-wide overrides for Mary, the Business Analyst.
+# Placed at _bmad/custom/bmad-agent-analyst.toml in each project.
+# BMAD merges this on top of the defaults in bmad-agent-analyst/customize.toml.
+#
+# Scalars: override wins
+# Arrays (persistent_facts, principles, activation_steps_*): APPEND to defaults
+# Arrays-of-tables keyed by `code`: replace matching entry, append new ones
+
+[agent]
+
+# --- Persistent facts appended to Mary's defaults ---
+# Add org-wide context: tech constraints, domain knowledge, standards.
+# persistent_facts = [
+#   "Our projects use the branching strategy documented in harness/rules/branching.md.",
+#   "file:{project-root}/docs/standards.md",
+# ]
+
+# --- Principle additions ---
+# principles = [
+#   "All findings must trace back to a user interview or market data source.",
+# ]
+
+# --- Menu additions ---
+# [[agent.menu]]
+# code = "PB"
+# description = "Create a product brief from completed research"
+# skill = "bmad-product-brief"

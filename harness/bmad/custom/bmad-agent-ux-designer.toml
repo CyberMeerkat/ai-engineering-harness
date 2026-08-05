@@ -1,0 +1,13 @@
+# Team-wide overrides for Sally, the UX Designer.
+# Placed at _bmad/custom/bmad-agent-ux-designer.toml in each project.
+
+[agent]
+
+# persistent_facts = [
+#   "Our design system is documented at docs/design-system.md.",
+#   "file:{project-root}/docs/design-system.md",
+# ]
+
+# principles = [
+#   "Every screen must handle the empty state, error state, and loading state.",
+# ]

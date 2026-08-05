@@ -54,6 +54,7 @@ export function validateSetup(rootDir) {
   requireFile(path.join(dirs.config, "plugins", "check-secrets.mjs"));
   requireFile(path.join(dirs.config, "plugins", "protect-branches.mjs"));
   requireFile(path.join(dirs.config, "rules", "branching.md"));
+  requireFile(path.join(dirs.config, "agents", "bmad-analyst.md"));
 
   // JSON structural checks
   JSON.parse(fs.readFileSync(path.join(rootDir, "opencode.jsonc"), "utf8"));
@@ -80,6 +81,7 @@ export function validateSetup(rootDir) {
   console.log("global app bundle present");
   console.log("local security plugins present");
   console.log("always-loaded rules present");
+  console.log("BMAD agents present");
 }
 
 export { ValidationError };

@@ -1,0 +1,13 @@
+# Team-wide overrides for John, the Product Manager.
+# Placed at _bmad/custom/bmad-agent-pm.toml in each project.
+
+[agent]
+
+# persistent_facts = [
+#   "Our branching strategy: feature/<slug> and fix/<slug> branches based on develop.",
+#   "file:{project-root}/docs/standards.md",
+# ]
+
+# principles = [
+#   "Every epic must have a measurable success metric before stories are written.",
+# ]

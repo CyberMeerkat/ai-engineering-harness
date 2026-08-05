@@ -38,6 +38,9 @@
     "localPluginsSources": [
       "harness/plugins/local"
     ],
+    "globalAgentsSources": [
+      "harness/agents"
+    ],
     "rulesSources": [
       "harness/rules"
     ],

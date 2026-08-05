@@ -1,0 +1,13 @@
+# Team-wide overrides for Winston, the System Architect.
+# Placed at _bmad/custom/bmad-agent-architect.toml in each project.
+
+[agent]
+
+# persistent_facts = [
+#   "Our stack: [fill in your defaults, e.g. Node.js, PostgreSQL, React].",
+#   "file:{project-root}/docs/architecture.md",
+# ]
+
+# principles = [
+#   "Every architecture decision must include a documented rationale and alternatives considered.",
+# ]

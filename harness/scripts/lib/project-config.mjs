@@ -102,6 +102,22 @@ async function copyPluginsFlat(dryRun, sourceRoot, targetRoot) {
 }
 
 /**
+ * Copies every .md file under sourceRoot into targetRoot (agents), except
+ * README.md — that's folder meta-documentation, not an agent definition.
+ */
+async function copyAgentsFlat(dryRun, sourceRoot, targetRoot) {
+  if (!fs.existsSync(sourceRoot)) return;
+  const entries = fs
+    .readdirSync(sourceRoot, { withFileTypes: true })
+    .filter((e) => e.isFile() && /\.md$/.test(e.name) && e.name.toLowerCase() !== "readme.md");
+  for (const entry of entries) {
+    await action(dryRun, `copy agent ${entry.name}`, () => {
+      fs.copyFileSync(path.join(sourceRoot, entry.name), path.join(targetRoot, entry.name));
+    });
+  }
+}
+
+/**
  * Copies every .md file under sourceRoot into targetRoot (always-loaded
  * rules), except README.md — that's meta-documentation about the folder
  * itself, not model-facing instruction content, and would otherwise get
@@ -217,12 +233,23 @@ export async function buildProjectConfig(dryRun, mode, rootDir, manifest, retent
     await copyPluginsFlat(dryRun, path.join(rootDir, sourceRel), globalPlugins);
   }
 
+  // 8. global agents (see harness/agents/README.md)
+  const globalAgents = path.join(dirs.config, "agents");
+  await action(dryRun, "clear existing global agents", () => {
+    if (fs.existsSync(globalAgents)) fs.rmSync(globalAgents, { recursive: true, force: true });
+    fs.mkdirSync(globalAgents, { recursive: true });
+  });
+  for (const sourceRel of manifest.opencode?.globalAgentsSources || []) {
+    await copyAgentsFlat(dryRun, path.join(rootDir, sourceRel), globalAgents);
+  }
+
   console.log(`built ${path.join(rootDir, "opencode.jsonc")}`);
   console.log(`built ${projectOpencodeDir}`);
   console.log(`built ${path.join(dirs.config, "opencode.json")}`);
   console.log(`built ${globalRules}`);
   console.log(`built ${globalSkills}`);
   console.log(`built ${globalPlugins}`);
+  console.log(`built ${globalAgents}`);
 
   if (!dryRun && fs.existsSync(path.join(dirs.backupRoot, timestamp))) {
     console.log(`backed up prior global OpenCode state to ${path.join(dirs.backupRoot, timestamp)}`);

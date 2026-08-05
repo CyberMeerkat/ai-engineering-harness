@@ -1,0 +1,15 @@
+# Team-wide overrides for Amelia, the Senior Software Engineer.
+# Placed at _bmad/custom/bmad-agent-dev.toml in each project.
+
+[agent]
+
+# persistent_facts = [
+#   "Our branching strategy: feature/<slug> and fix/<slug> from develop. PRs target develop.",
+#   "Never push directly to develop, main, staging, stable, or dev without explicit approval.",
+#   "file:{project-root}/docs/standards.md",
+# ]
+
+# principles = [
+#   "Create a feature branch before implementing any story.",
+#   "Open a PR when a story is complete — do not merge it yourself.",
+# ]

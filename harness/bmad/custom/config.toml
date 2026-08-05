@@ -1,0 +1,14 @@
+# Cross-agent team configuration.
+# Placed at _bmad/custom/config.toml in each project.
+# Controls shared settings like output paths, language, and user display name.
+
+# [config]
+# user_name = ""              # Your name — agents greet you by this
+# communication_language = "English"
+# document_output_language = "English"
+
+# # Where agents write planning artifacts (PRD, architecture, epics, stories)
+# planning_artifacts = "docs/bmad"
+
+# # Where agents write general output documents
+# document_root = "docs"
