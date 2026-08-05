@@ -53,6 +53,7 @@ export function validateSetup(rootDir) {
   requireFile(path.join(dirs.config, "skills", "understand", "SKILL.md"));
   requireFile(path.join(dirs.config, "plugins", "check-secrets.mjs"));
   requireFile(path.join(dirs.config, "plugins", "protect-branches.mjs"));
+  requireFile(path.join(dirs.config, "plugins", "check-bmad.mjs"));
   requireFile(path.join(dirs.config, "rules", "branching.md"));
   requireFile(path.join(dirs.config, "agents", "bmad-analyst.md"));
 
@@ -80,6 +81,7 @@ export function validateSetup(rootDir) {
   console.log("core repo-managed OpenCode skills present");
   console.log("global app bundle present");
   console.log("local security plugins present");
+  console.log("BMAD enforcement plugin present");
   console.log("always-loaded rules present");
   console.log("BMAD agents present");
 }

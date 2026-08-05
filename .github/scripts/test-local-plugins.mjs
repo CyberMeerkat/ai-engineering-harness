@@ -134,6 +134,53 @@ async function expectAllowed(hooks, input, output, label) {
   fs.rmSync(noGitflowRepo, { recursive: true, force: true });
 }
 
+// ── check-bmad.mjs ───────────────────────────────────────────────────────────
+{
+  const { CheckBmad } = await import(toFileUrl(path.join(PLUGINS_DIR, "check-bmad.mjs")));
+
+  function git(args, cwd) {
+    return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  }
+
+  // Repo WITHOUT _bmad/
+  const noRepo = fs.mkdtempSync(path.join(os.tmpdir(), "ci-check-bmad-no-"));
+  git(["init", "-b", "main"], noRepo);
+  git(["config", "user.email", "ci@test.com"], noRepo);
+  git(["config", "user.name", "ci"], noRepo);
+  fs.writeFileSync(path.join(noRepo, "f.txt"), "x");
+  git(["add", "."], noRepo);
+  git(["commit", "-m", "init"], noRepo);
+
+  const hooks1 = await CheckBmad({ project: {}, client: {}, $: {}, directory: noRepo, worktree: noRepo });
+  await expectBlocked(hooks1, { tool: "write" }, { args: { filePath: "a.js", content: "x" } }, "no _bmad: first write warns");
+  await expectAllowed(hooks1, { tool: "write" }, { args: { filePath: "b.js", content: "x" } }, "no _bmad: second write same session is silent (warned once)");
+  await expectAllowed(hooks1, { tool: "read" }, { args: { filePath: "a.js" } }, "no _bmad: read tool not modifying, always allowed");
+  await expectAllowed(hooks1, { tool: "bash" }, { args: { command: "HARNESS_SKIP_BMAD_CHECK=1 git status" } }, "no _bmad: override prefix suppresses warning");
+
+  // Repo WITH _bmad/
+  const withBmad = fs.mkdtempSync(path.join(os.tmpdir(), "ci-check-bmad-yes-"));
+  git(["init", "-b", "main"], withBmad);
+  git(["config", "user.email", "ci@test.com"], withBmad);
+  git(["config", "user.name", "ci"], withBmad);
+  fs.mkdirSync(path.join(withBmad, "_bmad"), { recursive: true });
+  fs.writeFileSync(path.join(withBmad, "f.txt"), "x");
+  git(["add", "."], withBmad);
+  git(["commit", "-m", "init"], withBmad);
+
+  const hooks2 = await CheckBmad({ project: {}, client: {}, $: {}, directory: withBmad, worktree: withBmad });
+  await expectAllowed(hooks2, { tool: "write" }, { args: { filePath: "a.js", content: "x" } }, "with _bmad: write allowed");
+  await expectAllowed(hooks2, { tool: "edit" }, { args: { filePath: "a.js", newString: "y" } }, "with _bmad: edit allowed");
+
+  // Not a git repo
+  const notGit = fs.mkdtempSync(path.join(os.tmpdir(), "ci-check-bmad-notgit-"));
+  const hooks3 = await CheckBmad({ project: {}, client: {}, $: {}, directory: notGit, worktree: notGit });
+  await expectAllowed(hooks3, { tool: "write" }, { args: { filePath: "a.js", content: "x" } }, "not a git repo: inert");
+
+  fs.rmSync(noRepo, { recursive: true, force: true });
+  fs.rmSync(withBmad, { recursive: true, force: true });
+  fs.rmSync(notGit, { recursive: true, force: true });
+}
+
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed.`);
   process.exit(1);
