@@ -1,8 +1,9 @@
 # Cross-agent team configuration.
 # Placed at _bmad/custom/config.toml in each project.
 # Controls shared settings like output paths, language, and user display name.
+# Note: the correct schema table name is [core], not [config].
 
-# [config]
+# [core]
 # user_name = ""              # Your name — agents greet you by this
 # communication_language = "English"
 # document_output_language = "English"
