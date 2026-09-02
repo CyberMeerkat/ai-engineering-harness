@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- `versions.json` pinned `opencode.npm`/`opencode.desktop.version` at `1.16.2`, several releases behind current (`1.18.26` at time of writing). Fresh installs and `--incremental` re-runs of `setup.sh`/`setup.ps1` were pulling a stale CLI/desktop build. Bumped both to `1.18.26`. Desktop release asset filenames (`opencode-desktop-{mac,win}-{arm64,x64}.{dmg,exe}`) are unchanged in the upstream release, so no changes were needed in `harness/scripts/lib/opencode-install.mjs`.
+- Investigated `The-Delta-AI-Library/delta-ai-harness` (our original fork source) and its successor `delta-delivery-loop` harness family for an upstream fix to port. Neither tracks the `opencode` CLI binary version at all — both assume it's externally managed and only detect drift in their own harness *content* (agent/skill files) via `git ls-remote` against their own repos. No reusable fix existed upstream for this; the pin simply needed manual bumping.
+
 ## [0.3.0] - 2026-07-15
 
 ### Added
