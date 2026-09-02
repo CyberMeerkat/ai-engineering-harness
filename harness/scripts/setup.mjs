@@ -31,12 +31,14 @@ const HELP_TEXT = `Usage: node harness/scripts/setup.mjs [options]
 (normally invoked via ./setup.sh or .\\setup.ps1, not directly)
 
 Options:
-  --dry-run       Print actions without executing them.
-  --incremental   Update in place, keep global OpenCode state (default).
-  --reset         Wipe global OpenCode config/data/cache before rebuild.
-  --uninstall     Restore the newest backup and exit.
-  --doctor        Run diagnostics and exit.
-  -h, --help      Show this message.
+  --dry-run         Print actions without executing them.
+  --incremental     Update in place, keep global OpenCode state (default).
+  --reset           Wipe global OpenCode config/data/cache before rebuild.
+  --uninstall       Restore the newest backup and exit.
+  --doctor          Run diagnostics and exit.
+  --check-versions  Report pinned versions that have fallen behind npm, and exit.
+                    Never writes — bumping a pin is a reviewed decision.
+  -h, --help        Show this message.
 `;
 
 function parseArgs(argv) {
@@ -45,6 +47,7 @@ function parseArgs(argv) {
     mode: "incremental",
     uninstall: false,
     doctor: false,
+    checkVersions: false,
     help: false,
   };
 
@@ -64,6 +67,9 @@ function parseArgs(argv) {
         break;
       case "--doctor":
         flags.doctor = true;
+        break;
+      case "--check-versions":
+        flags.checkVersions = true;
         break;
       case "-h":
       case "--help":
@@ -110,6 +116,19 @@ async function main() {
   if (flags.doctor) {
     const allGreen = runDoctor(ROOT_DIR, versions);
     process.exit(allGreen ? 0 : 1);
+  }
+
+  if (flags.checkVersions) {
+    // Report-only by design: a pin bump changes what every fresh install of this
+    // harness receives, so it is a reviewed edit to versions.json, never a side
+    // effect of running a diagnostic. Exits non-zero only when a pin references a
+    // version that is not published — that breaks fresh installs outright.
+    const { checkVersions, summarise, formatReport } = await import("./lib/version-check.mjs");
+    const results = await checkVersions(versions);
+    const status = summarise(results);
+    console.log(`version pins: ${status}\n`);
+    for (const line of formatReport(results)) console.log(line);
+    process.exit(status === "PIN_UNAVAILABLE" ? 1 : 0);
   }
 
   const manifest = readJson(MANIFEST_PATH);

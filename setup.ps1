@@ -4,6 +4,7 @@ param(
   [switch]$Incremental,
   [switch]$Uninstall,
   [switch]$Doctor,
+  [switch]$CheckVersions,
   [switch]$Help
 )
 
@@ -84,6 +85,7 @@ if ($Reset) { $scriptArgs += '--reset' }
 if ($Incremental) { $scriptArgs += '--incremental' }
 if ($Uninstall) { $scriptArgs += '--uninstall' }
 if ($Doctor) { $scriptArgs += '--doctor' }
+if ($CheckVersions) { $scriptArgs += '--check-versions' }
 if ($Help) { $scriptArgs += '--help' }
 
 & node (Join-Path $HarnessDir 'scripts\setup.mjs') @scriptArgs

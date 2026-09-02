@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # A version pin goes stale because upstream published, not because this repo
+    # changed — so the drift check needs a trigger that fires without a commit.
+    - cron: '0 6 * * 1'
 
 jobs:
   # ── 1. shellcheck all .sh files ─────────────────────────────────────────────
@@ -146,3 +150,79 @@ jobs:
             echo "checking $f"
             node --check "$f"
           done
+          for f in harness/scripts/*.mjs; do
+            echo "checking $f"
+            node --check "$f"
+          done
+
+  # ── 7. structural invariants ────────────────────────────────────────────────
+  # Catches the class of drift where two files that must agree quietly stop
+  # agreeing — a rule not listed in its README, a skill with no SKILL.md, a
+  # manifest pointing at a renamed directory. None of these break a dry-run, so
+  # without this job they ship green.
+  test-structural:
+    name: Structural invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Assert structural invariants
+        run: node .github/scripts/test-structural.mjs
+
+  # ── 8. dependency policy ────────────────────────────────────────────────────
+  # This harness installs plugins that run with filesystem and shell access in
+  # every project the user opens, so a dependency here reaches further than in an
+  # ordinary app. The policy is zero-by-default; this job makes that a gate rather
+  # than an accident of nobody having added one yet.
+  dependency-policy:
+    name: Dependency policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enforce dependency policy
+        run: node harness/scripts/check-deps.mjs
+
+      - name: npm audit
+        # There are no dependencies and therefore no lockfile, and `npm audit`
+        # cannot run without one. The audit becomes a real gate the moment a
+        # dependency appears; until then the policy job above provides the cover.
+        run: |
+          if [ -f package-lock.json ]; then
+            npm audit --audit-level=moderate
+          else
+            echo "No package-lock.json — nothing to audit. Dependency policy is enforced separately."
+          fi
+
+  # ── 9. version pin drift (advisory) ─────────────────────────────────────────
+  # Reports when a pin in versions.json has fallen behind what npm publishes.
+  # Advisory by default: being behind is a recommendation, and a job that fails
+  # the build for a recommendation is one people learn to ignore. It DOES fail on
+  # a pin that references an unpublished version, because that breaks fresh
+  # installs outright.
+  #
+  # Scheduled as well as on push: a pin goes stale because upstream released, not
+  # because this repo changed, so a push-only trigger would never notice.
+  version-drift:
+    name: Version pin drift (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check version pins against the npm registry
+        run: node harness/scripts/check-versions.mjs

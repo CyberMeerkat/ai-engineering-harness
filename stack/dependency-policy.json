@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "updatedOn": "2026-09-02",
+
+  "rationale": "This harness installs plugins, skills, agents and rules into the user's global OpenCode config, and its local plugins run with filesystem and shell access inside every project the user opens. A transitive dependency here reaches further than one in an ordinary application: a compromised package runs in every session, in every repo, with the user's own permissions. The default is therefore zero, and every exception is a recorded decision rather than an inference from a lockfile.",
+
+  "rules": {
+    "maxDirectDependencies": 0,
+    "maxDirectDevDependencies": 0,
+    "allowOptionalDependencies": false,
+    "allowNativeModules": false,
+    "requireExactVersions": true,
+    "requireLockfileIntegrity": true,
+    "maxAuditSeverity": "moderate"
+  },
+
+  "ruleNotes": {
+    "maxDirectDependencies": "Zero, not 'few'. At zero, every audit question, advisory and lockfile-integrity concern disappears entirely; at one, none of them do. That discontinuity is why the bar is a count and not a judgement call. The installer core already proves zero is achievable here — it uses native JSON.parse and fetch() rather than pulling in a JSON parser or an HTTP client.",
+    "allowNativeModules": "A native module runs node-gyp at install time, which is arbitrary code execution during `npm install`, before anybody has reviewed anything. Requires an explicit allowlist entry naming who approved it.",
+    "requireExactVersions": "A caret range means a fresh install can silently adopt a version nobody reviewed. Exact pins plus Dependabot gives reproducibility AND upgrades; pins alone rot, ranges alone are unreviewed.",
+    "requireLockfileIntegrity": "An entry without `resolved` + `integrity` is one npm cannot verify the contents of when it downloads it.",
+    "maxAuditSeverity": "The advisory level at which CI fails, if a lockfile ever exists to audit."
+  },
+
+  "allowlist": [],
+
+  "allowlistContract": {
+    "purpose": "An allowlist entry is a recorded human decision, not a mute button. It must name who approved it, when, and why — so a reviewer can go and ask that person, and so an entry that has outlived its reason is visible rather than invisible.",
+    "requiredFields": ["package", "approvedBy", "approvedOn", "reason", "enabled"],
+    "exampleEntry": {
+      "_comment": "Documentation only — this key is not read by the checker. Copy this shape into `allowlist` above to request an exemption.",
+      "package": "some-package",
+      "scope": "why it is needed, in one phrase",
+      "approvedBy": "A Real Person",
+      "approvedOn": "2026-09-02",
+      "reason": "What this buys that native Node cannot, and why the wider reach is acceptable.",
+      "reviewBy": "2027-03-02",
+      "enabled": true
+    },
+    "rules": [
+      "An entry with enabled:false is ignored — the dependency will fail the check.",
+      "An entry missing any required field is rejected and reported, never treated as approval. A half-filled exemption is how a policy quietly becomes decorative.",
+      "approvedBy must be a person. 'team', 'automation', 'ci' or a bot name is not an approver.",
+      "reviewBy is optional; when set and in the past, the check warns so stale approvals surface instead of ossifying.",
+      "Adding an entry is a reviewed commit. Editing this file IS the approval step — do not weaken the rules to make a build pass."
+    ]
+  }
+}

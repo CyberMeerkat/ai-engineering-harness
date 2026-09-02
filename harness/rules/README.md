@@ -9,6 +9,8 @@ Use this folder sparingly. Every file here is **always** in context, in every se
 | File | What it covers |
 |---|---|
 | `branching.md` | Feature/fix branch naming and workflow, PR conventions, and the non-negotiables around merging and pushing to protected branches. Backed by `../plugins/local/protect-branches.mjs` and the `permission.bash` rules in `stack/manifest.json` for the cases that need actual enforcement, not just guidance. |
+| `context-discipline.md` | Cache-prefix discipline (volatile content at the tail, no interpolation into stable content), caps on agent-maintained state files, and keeping bulk content out of the main context. Cost rules — each one compounds silently rather than failing loudly, which is why they are stated rather than left to judgement. Partially enforced: `.github/scripts/test-structural.mjs` fails if any file in this folder interpolates a timestamp or run ID, since that would bust the prompt cache on every turn of every session. |
+| `project-setup.md` | BMAD detection and the expectation that every project under this harness uses the BMad Method. Backed by `../plugins/local/check-bmad.mjs`. |
 
 ## Adding a new rule
 
