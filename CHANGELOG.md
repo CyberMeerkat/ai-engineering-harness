@@ -5,10 +5,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+Four integrity checks, adapted from patterns in the Delta `delta-delivery-loop` harness
+(the successor to the repo this one was forked from). Each one turns something that was
+previously an assumption into something CI can fail on.
+
+- **Structural invariants** (`.github/scripts/test-structural.mjs`, CI job `test-structural`). 22 assertions about the *shape* of the repo — no network, no OpenCode install, runs in milliseconds. Targets the class of drift where two files that must agree quietly stop agreeing: a rule added to `harness/rules/` but never listed in its README, a skill directory with no `SKILL.md`, a manifest pointing at a renamed directory, a skill whose frontmatter `name` no longer matches its folder. None of these break a dry-run, so before this job they would ship green.
+  - Each invariant was verified by deliberately breaking it and confirming the failure. Eight mutation cases were run (orphan rule file, range pin, disagreeing opencode pins, missing manifest dir, timestamp in an always-loaded rule, skill name mismatch, introduced dependency, malformed allowlist entry); all eight were caught.
+  - Two invariants caught real pre-existing drift on first run: `project-setup.md` was missing from the `harness/rules/README.md` table, and the CI syntax-check job never covered `harness/scripts/*.mjs` (only `lib/*.mjs`). Both fixed here.
+
+- **Version pin drift checker** (`harness/scripts/check-versions.mjs`, `harness/scripts/lib/version-check.mjs`, `./setup.sh --check-versions` / `.\setup.ps1 -CheckVersions`, CI job `version-drift`). Compares every pin in `versions.json` against what npm actually publishes.
+  - **It never writes.** A bump changes what every fresh install receives, so it is a reviewed edit, not a side effect of running a diagnostic. Reports `PIN_CURRENT` / `CANDIDATE_FOUND` / `PIN_UNAVAILABLE` / `PIN_FLOATING` / `CHECK_FAILED` and exits 0 — except on `PIN_UNAVAILABLE`, which breaks fresh installs outright.
+  - **An unreachable registry is never reported as "behind."** A timeout, an offline laptop, and a private-registry 403 all report `CHECK_FAILED`. Reporting a network failure as staleness trains people to ignore the report.
+  - Scheduled weekly in CI as well as on push: a pin goes stale because upstream released, not because this repo changed, so a push-only trigger would never notice.
+  - Found two genuine drifts on first run: `opencode` (1.16.2, several releases behind) and `context-mode` (1.0.162 → 1.0.169).
+
+- **Dependency policy as reviewable data** (`stack/dependency-policy.json`, `harness/scripts/check-deps.mjs`, CI job `dependency-policy`). Declares zero direct dependencies, exact versions only, no optional deps, no native modules, lockfile integrity required.
+  - The bar is zero rather than few because the difference is a discontinuity, not a matter of degree: at zero, every audit and lockfile-integrity question disappears; at one, none of them do. This matters more here than in an ordinary application — the harness installs plugins that run with filesystem and shell access in every project the user opens.
+  - The allowlist has a real contract: an entry must name `approvedBy` (a **person** — "team", "automation", "ci" or a bot name is rejected), `approvedOn`, `reason`, and `enabled: true`. An entry missing any required field is **reported and refused**, never treated as approval, because a half-filled exemption is how a policy quietly becomes decorative. Optional `reviewBy` warns once past.
+  - Verified to actually fail: range dependency, exact-but-unapproved dependency, and `optionalDependencies` were each introduced and confirmed to exit 1.
+
+- **`harness/rules/context-discipline.md`** — a new always-loaded rule covering cache-prefix discipline (volatile content appended at the tail, never spliced into earlier turns; no timestamps or run IDs interpolated into stable content), caps on agent-maintained state files (120 lines, 40 ledger entries, oldest-first eviction), and keeping bulk content out of the main context by deriving in a sandbox rather than reading-then-summarising.
+  - Partially enforced rather than merely stated: `test-structural.mjs` fails if any file in `harness/rules/` contains a timestamp or run-ID placeholder, since an always-loaded file that changes byte-for-byte busts the provider prompt cache on every turn of every session.
+  - Cache-prefix and bounded-state patterns adapted from the MIT-licensed `oh-my-opencode-slim` approach by way of `delta-delivery-loop`. Adopted as written policy, deliberately not as a dependency — which is also the policy in the new dependency file.
+
+### Changed
+
+- `harness/rules/README.md` — table now lists all three rule files; `project-setup.md` had been missing since it was added.
+- `.github/workflows/ci.yml` — `test-installer-core` now syntax-checks `harness/scripts/*.mjs`, not just `harness/scripts/lib/*.mjs`. Added a weekly `schedule` trigger for the drift check.
+- `harness/scripts/lib/doctor.mjs` — closes by pointing at `--check-versions`. Doctor deliberately does not run it (doctor is expected to work offline and finish instantly), but the pinned-versions section is where someone looks when they suspect their tooling is out of date, so the pointer belongs there.
+- `CONTRIBUTING.md` — documents the dependency policy, the version-pin workflow, and the expanded pre-PR check list. Adds a note that a new check should be deliberately broken once before being committed: a check that has never failed is indistinguishable from one that cannot.
+
 ### Fixed
 
 - `versions.json` pinned `opencode.npm`/`opencode.desktop.version` at `1.16.2`, several releases behind current (`1.18.26` at time of writing). Fresh installs and `--incremental` re-runs of `setup.sh`/`setup.ps1` were pulling a stale CLI/desktop build. Bumped both to `1.18.26`. Desktop release asset filenames (`opencode-desktop-{mac,win}-{arm64,x64}.{dmg,exe}`) are unchanged in the upstream release, so no changes were needed in `harness/scripts/lib/opencode-install.mjs`.
-- Investigated `The-Delta-AI-Library/delta-ai-harness` (our original fork source) and its successor `delta-delivery-loop` harness family for an upstream fix to port. Neither tracks the `opencode` CLI binary version at all — both assume it's externally managed and only detect drift in their own harness *content* (agent/skill files) via `git ls-remote` against their own repos. No reusable fix existed upstream for this; the pin simply needed manual bumping.
+- Investigated `The-Delta-AI-Library/delta-ai-harness` (our original fork source) and its successor `delta-delivery-loop` harness family for an upstream fix to port. Neither tracks the `opencode` CLI binary version at all — both assume it's externally managed and only detect drift in their own harness *content* (agent/skill files) via `git ls-remote` against their own repos. No reusable fix existed upstream for this; the pin simply needed manual bumping. The `version-drift` check added above is what stops it going stale unnoticed again.
 
 ## [0.3.0] - 2026-07-15
 

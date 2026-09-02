@@ -42,6 +42,39 @@ To add a new skill:
 
 Edit `harness/plugins/opencode.plugins.json` and add the plugin name to the `"plugins"` array.
 
+## Adding a dependency
+
+Don't, unless you have to. `stack/dependency-policy.json` declares a zero-dependency
+policy, and `harness/scripts/check-deps.mjs` enforces it in CI.
+
+The reasoning: this harness installs plugins into the user's global OpenCode config, and
+those plugins run with filesystem and shell access in every project they open. A
+transitive dependency reaches further here than in an ordinary app. At zero dependencies,
+every audit and lockfile-integrity question disappears; at one, none of them do.
+
+If a dependency is genuinely warranted, add an allowlist entry to
+`stack/dependency-policy.json` naming who approved it (a person, not "team"), when, and
+why. Editing that file **is** the approval step — do not relax the rules to make CI pass.
+
+## Version pins
+
+`versions.json` pins the OpenCode CLI, the desktop app, and each npm-installed MCP.
+
+```bash
+./setup.sh --check-versions      # or: .\setup.ps1 -CheckVersions
+```
+
+This compares each pin against what npm actually publishes and reports
+`PIN_CURRENT` / `CANDIDATE_FOUND` / `PIN_UNAVAILABLE` / `PIN_FLOATING` / `CHECK_FAILED`.
+
+It **never writes**. A bump changes what every fresh install of this harness receives, so
+it is a reviewed edit to `versions.json`, not a side effect of running a diagnostic. Check
+the upstream changelog before taking an update.
+
+An unreachable registry reports `CHECK_FAILED`, never "behind" — a network failure is not
+staleness. CI runs this weekly as well as on push, because a pin goes stale when upstream
+releases, not when this repo changes.
+
 ## Coding conventions
 
 - **Node.js core (`harness/scripts/setup.mjs`, `harness/scripts/lib/*.mjs`):** each module should be independently testable — export pure-ish functions, avoid top-level side effects. Test with real inputs against a sandboxed temp directory before committing (see any `lib/*.mjs` file for the pattern); don't rely on syntax-checking alone.
@@ -68,11 +101,27 @@ shellcheck setup.sh
 node --check harness/plugins/local/*.mjs
 node .github/scripts/test-local-plugins.mjs
 
-# 5. Validate all JSON
+# 5. Structural invariants (fast, no network)
+node .github/scripts/test-structural.mjs
+
+# 6. Dependency policy
+node harness/scripts/check-deps.mjs
+
+# 7. Version pin drift (needs network; advisory)
+./setup.sh --check-versions
+
+# 8. Validate all JSON
 find . -name '*.json' -not -path './.git/*' | xargs -I{} node -e "JSON.parse(require('fs').readFileSync('{}','utf8'))"
 ```
 
 CI runs all of the above automatically on push and pull request.
+
+### A note on the checks that can't fail
+
+If you add a check, break something on purpose and confirm it actually reports the
+failure before you commit it. Several of the invariants in `test-structural.mjs` were
+written, passed immediately, and only proved to be real after being deliberately
+violated — a check that has never failed is indistinguishable from one that cannot.
 
 ## Commit style
 

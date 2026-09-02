@@ -104,5 +104,11 @@ export function runDoctor(rootDir, versions) {
     console.error("One or more checks FAILED. See [FAIL] lines above.");
   }
 
+  // Deliberately not run here: it needs the network, and doctor is expected to work
+  // offline and finish instantly. Pointed at instead, so the check is discoverable
+  // from the place people look when something seems out of date.
+  console.log("\nPinned versions above are what this harness installs, not what npm");
+  console.log("currently publishes. To compare them: ./setup.sh --check-versions");
+
   return allGreen;
 }
