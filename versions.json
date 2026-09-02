@@ -7,9 +7,9 @@
     "scoopPackage": "nodejs-lts"
   },
   "opencode": {
-    "npm": "1.16.2",
+    "npm": "1.18.26",
     "desktop": {
-      "version": "1.16.2",
+      "version": "1.18.26",
       "macos": {
         "arm64": "opencode-desktop-mac-arm64.dmg",
         "x64": "opencode-desktop-mac-x64.dmg"
